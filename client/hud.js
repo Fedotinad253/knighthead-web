@@ -126,7 +126,7 @@ export class Hud {
         cards[i].classList.toggle('full', f >= 0.999);
       }
       const local = game.local;
-      $('dash').classList.toggle('off', now < local.nextDash);
+      $('dash').classList.toggle('off', now < local.nextRoll);
       $('parry').classList.toggle('off', now < local.parryReadyAt && !local.parrying);
     }
 
@@ -170,7 +170,7 @@ export class Hud {
     const move = ['up', 'left', 'down', 'right'].map(k).join('');
     $('hint').textContent = onMap
       ? (game.session.stoneOpen ? `1 / 2 / 3 — выбрать сложность     ${k('back')} — отойти` : `${move} — бежать избушкой     ${k('interact')} — в бой у логова     ${k('back')} — отойти от карты`)
-      : `${k('light')}/${k('heavy')} — атаки   ${k('card')} — карта   ${k('dash')} — рывок   ${k('parry')} — парирование   ${k('interact')} — действие   ${k('help')} — управление   ${k('debug')} — отладка`;
+      : `${k('light')}/${k('heavy')} — атаки   ${k('card')} — карта   ${k('dash')} — перекат   ${k('parry')} — парирование   ${k('interact')} — действие   ${k('help')} — управление   ${k('debug')} — отладка`;
   }
 
   updateMap(onMap) {

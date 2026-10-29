@@ -105,10 +105,13 @@ export const DIFFICULTIES = [
   },
 ];
 
-/** Богатырь: движение как в Enter the Gungeon, рывок без выносливости, парирование на V. */
+/**
+ * Богатырь: движение как в Enter the Gungeon, перекат без выносливости, парирование на V.
+ * Перекат — только перемещение: снаряды через него не перепрыгнуть (защита — уклониться или парировать).
+ */
 export const PLAYER = {
   speed: 5.5, acceleration: 65, deceleration: 85,
-  dashDistance: 4.5, dashDuration: 0.16, dashCooldown: 0.35, dashInvulnerability: 0.2,
+  rollDistance: 3.2, rollDuration: 0.42, rollCooldown: 0.15,
   parryWindow: 1, parryCooldown: 0.4, parryInvulnerability: 0.5,
   hurtRadius: 0.45, hitInvulnerability: 1, blinkRate: 6, blinkBrightness: 0.55,
   radius: 0.4, maxHealth: 100,

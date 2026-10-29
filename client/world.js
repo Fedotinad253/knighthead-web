@@ -268,7 +268,11 @@ function drawPlayer(game, p) {
   view.groundEllipse(p.x, p.z, 0.5, 0.5, 'rgba(0,0,0,0.3)');
   const rig = p.rig;
   p.animator.setWeaponIfChanged(p.dropped ? null : WEAPONS[p.weapon]);
-  const base = rig.base(view, p.x, p.z, { flip: p.flip, lying: p.downed ? (p.flip ? -90 : 90) : 0 });
+  // Перекат: кувырок вперёд вокруг середины тела с поджатием; вращение плавно разгоняется и тормозит.
+  const roll = p.anim?.roll ?? 0;
+  const eased = roll > 0 ? roll * roll * (3 - 2 * roll) : 0;
+  const base = rig.base(view, p.x, p.z, { flip: p.flip, lying: p.downed ? (p.flip ? -90 : 90) : 0,
+    spin: -360 * eased, spinCenter: 0.75, squash: roll > 0 ? 1 - 0.3 * Math.sin(roll * Math.PI) : 1 });
   const blink = p.anim?.blink > 0 && Math.floor(game.now * 5 * 2) % 2 === 1;
   const flash = game.now < (p.flashUntil ?? 0);
   rig.draw(ctx, base, {

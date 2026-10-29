@@ -190,9 +190,16 @@ class Game {
       this.view.runShake = 0;
       const cinematic = this.boss?.cutscene;
       this.view.zoom += ((cinematic ? 0.5 : 1) - this.view.zoom) * (1 - Math.exp(-dt * 3));
-      const tx = cinematic ? this.boss.x : this.local.x + this.local.fx * 1.5;
-      const tz = cinematic ? this.boss.z : this.local.z + this.local.fz * 1.5;
-      this.view.update(tx, tz, dt, this.now);
+      // Как в Enter the Gungeon: камера немного смещается к курсору (на пятую часть, не дальше 2.5 м).
+      let tx = this.local.x, tz = this.local.z;
+      if (cinematic) { tx = this.boss.x; tz = this.boss.z; } else if (!this.hud.dialogueOpen) {
+        const [mx, mz] = this.view.unproject(this.input.mouseX, this.input.mouseY);
+        let ox = (mx - this.local.x) * 0.2, oz = (mz - this.local.z) * 0.2;
+        const l = Math.hypot(ox, oz);
+        if (l > 2.5) { ox *= 2.5 / l; oz *= 2.5 / l; }
+        tx += ox; tz += oz;
+      }
+      this.view.update(tx, tz, dt, this.now, cinematic ? 0.5 : 0.3);
       drawWorld(this);
     }
     this.input.endFrame();
@@ -230,7 +237,7 @@ class Game {
       }
       if (fx > 0.15) avatar.flip = false; else if (fx < -0.15) avatar.flip = true;
       const speed = dt > 0 && Math.hypot(avatar.x - ox, avatar.z - oz) < 2 ? Math.hypot(avatar.x - ox, avatar.z - oz) / dt : 0;
-      avatar.animator.update(dt, avatar.downed ? 0 : speed, this.now, Math.max(0, avatar.anim?.swing ?? 0));
+      avatar.animator.update(dt, avatar.downed ? 0 : speed, this.now, Math.max(0, avatar.anim?.swing ?? 0), avatar.anim?.roll ?? 0);
       return avatar;
     });
     for (const id of [...this.avatars.keys()]) if (!seen.has(id)) this.avatars.delete(id);

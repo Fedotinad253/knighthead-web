@@ -14,7 +14,7 @@ export class LocalPlayer {
     this.game = game;
     this.x = 0; this.z = 0; this.vx = 0; this.vz = 0;
     this.fx = 0; this.fz = 1;
-    this.dashStart = -10; this.dashEnd = 0; this.nextDash = 0; this.dashX = 0; this.dashZ = 1;
+    this.rollStart = -10; this.rollEnd = 0; this.nextRoll = 0; this.rollX = 0; this.rollZ = 1;
     this.stunnedUntil = 0;
     this.attack = null;
     this.lightIndex = 0; this.comboExpire = 0;
@@ -34,11 +34,13 @@ export class LocalPlayer {
   get now() { return this.game.now; }
   get me() { return this.game.me; }
   get weapon() { return WEAPONS[this.me?.weapon ?? 0]; }
-  get dashing() { return this.now < this.dashEnd; }
+  get rolling() { return this.now < this.rollEnd; }
+  /** Доля пройденного переката: 0..1 (0 — не катится). */
+  get rollProgress() { return this.rolling ? (this.now - this.rollStart) / P.rollDuration : 0; }
   get stunned() { return this.now < this.stunnedUntil; }
   get parrying() { return this.now < this.parryUntil; }
   get invulnerable() {
-    return this.now < this.dashStart + P.dashInvulnerability || this.now < this.invulnerableUntil || this.me?.downed || this.game.cutscene;
+    return this.now < this.invulnerableUntil || this.me?.downed || this.game.cutscene;
   }
   get canBeInterrupted() { return !this.attack || this.phase === 'recovery'; }
   get phase() {
@@ -57,7 +59,7 @@ export class LocalPlayer {
   teleport(x, z, fx, fz) {
     this.x = x; this.z = z; this.vx = 0; this.vz = 0;
     if (fx || fz) { this.fx = fx; this.fz = fz; }
-    this.dashEnd = 0;
+    this.rollEnd = 0;
     this.cancelAttack();
   }
 
@@ -76,17 +78,19 @@ export class LocalPlayer {
     if (!me) return;
     const locked = game.cutscene || game.dialogueOpen;
 
-    if (this.stunned) { this.vx = this.vz = 0; this.dashEnd = 0; }
+    if (this.stunned) { this.vx = this.vz = 0; this.rollEnd = 0; }
 
     // Движение.
     if (locked || me.downed || this.stunned) {
       this.vx = this.vz = 0;
       if (locked || me.downed) this.cancelAttack();
     } else {
-      if (input.dashPressed) this.tryDash();
-      if (this.dashing) {
-        const v = P.dashDistance / P.dashDuration;
-        this.vx = this.dashX * v; this.vz = this.dashZ * v;
+      if (input.dashPressed) this.tryRoll();
+      if (this.rolling) {
+        // Перекат как в Enter the Gungeon: быстрый старт, к концу замедляется; направление не меняется.
+        const p = this.rollProgress;
+        const v = P.rollDistance / (P.rollDuration * 0.8) * (1 - 0.6 * p * p);
+        this.vx = this.rollX * v; this.vz = this.rollZ * v;
       } else {
         // После рывка не «скользим» с его скоростью.
         const l = Math.hypot(this.vx, this.vz);
@@ -121,6 +125,7 @@ export class LocalPlayer {
       parry: this.parrying ? Math.round((this.parryUntil - this.now) * 100) / 100 : 0,
       blink: this.now < this.blinkUntil ? Math.round((this.blinkUntil - this.now) * 100) / 100 : 0,
       stun: this.stunned,
+      roll: Math.round(this.rollProgress * 100) / 100,
     };
   }
 
@@ -132,15 +137,15 @@ export class LocalPlayer {
     if (l <= rate) { this.vx = dx; this.vz = dz; } else { this.vx += ex / l * rate; this.vz += ez / l * rate; }
   }
 
-  tryDash() {
-    if (this.now < this.nextDash || !this.canBeInterrupted) return;
+  tryRoll() {
+    if (this.now < this.nextRoll || !this.canBeInterrupted) return;
     this.cancelAttack();
     const [mx, mz] = this.game.input.move;
-    if (Math.hypot(mx, mz) > 0.05) { this.dashX = mx; this.dashZ = mz; } else { this.dashX = this.fx; this.dashZ = this.fz; }
-    this.setFacing(this.dashX, this.dashZ);
-    this.dashStart = this.now;
-    this.dashEnd = this.now + P.dashDuration;
-    this.nextDash = this.dashEnd + P.dashCooldown;
+    if (Math.hypot(mx, mz) > 0.05) { this.rollX = mx; this.rollZ = mz; } else { this.rollX = this.fx; this.rollZ = this.fz; }
+    this.setFacing(this.rollX, this.rollZ);
+    this.rollStart = this.now;
+    this.rollEnd = this.now + P.rollDuration;
+    this.nextRoll = this.rollEnd + P.rollCooldown;
     blip('dash');
   }
 
@@ -170,6 +175,8 @@ export class LocalPlayer {
     if (input.heavyPressed) this.buffer(input.cardHeld ? ATTACK.CARD_STRIKE : ATTACK.HEAVY);
 
     if (this.attack) this.tickAttack(dt);
+    // Во время переката не бьём — нажатие сработает сразу после него (буфер ввода).
+    if (this.rolling) { if (this.buffered !== null) this.bufferedAt = this.now; return; }
     if (!this.attack && this.buffered !== null && this.now - this.bufferedAt <= P.inputBuffer) {
       const kind = this.buffered;
       this.buffered = null;

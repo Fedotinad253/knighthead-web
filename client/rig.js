@@ -67,11 +67,16 @@ export class Rig {
   }
 
   /** Матрица «пиксели скелета → экран» для персонажа, стоящего в (x, z). */
-  base(view, x, z, { flip = false, lying = 0 } = {}) {
+  base(view, x, z, { flip = false, lying = 0, spin = 0, spinCenter = 0, squash = 1 } = {}) {
     const [px, py] = view.project(x, z);
     const S = view.s * this.k;
     let m = [flip ? -S : S, 0, 0, -S, px, py];
     if (lying) m = mul(m, trs(0, 0, lying, 1, 1));
+    // Кувырок: поворот вокруг середины тела (spinCenter — высота в метрах) и сжатие по высоте.
+    if (spin || squash !== 1) {
+      const c = spinCenter / this.k;
+      m = mul(m, mul(trs(0, c * squash, spin, 1, squash), trs(0, -c, 0, 1, 1)));
+    }
     return m;
   }
 
@@ -160,8 +165,19 @@ export class BogatyrAnimator {
     this.rig.order = this.rig.nodes.filter((n) => n.image).sort((a, b) => b.worldZ - a.worldZ);
   }
 
-  update(dt, speed, now, attack = 0) {
+  update(dt, speed, now, attack = 0, roll = 0) {
     const k = this.rig.k;
+    if (roll > 0) {
+      // Перекат: ноги и руки поджаты к телу.
+      const tuck = Math.sin(Math.min(1, roll) * Math.PI);
+      this.rig.pose('leg_front', 35 * tuck, 0, 0.25 / k * tuck);
+      this.rig.pose('leg_back', 25 * tuck, 0, 0.2 / k * tuck);
+      this.rig.pose('arm_front', 60 * tuck);
+      this.rig.pose('arm_back', 45 * tuck);
+      this.rig.pose('cape', -20 * tuck);
+      this.rig.pose('torso', 0);
+      return;
+    }
     this.blend += Math.sign((speed > 0.4 ? 1 : 0) - this.blend) * Math.min(Math.abs((speed > 0.4 ? 1 : 0) - this.blend), dt * 6);
     this.phase += Math.min(speed, 12) * dt / 0.7 * Math.PI;
     const step = Math.sin(this.phase) * this.blend;

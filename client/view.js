@@ -34,10 +34,13 @@ export class View {
 
   shake(amount, duration, now) { this.shakes.push({ amount, until: now + duration, duration }); }
 
-  update(targetX, targetZ, dt, now, smooth = 0.12) {
-    const k = 1 - Math.exp(-dt / Math.max(0.01, smooth));
-    this.cx += (targetX - this.cx) * k;
-    this.cz += (targetZ - this.cz) * k;
+  /**
+   * Камера догоняет цель плавно, с разгоном и торможением (как SmoothDamp в Unity), — без рывков,
+   * даже когда цель резко сдвинулась (перекат, поворот к курсору).
+   */
+  update(targetX, targetZ, dt, now, smooth = 0.3) {
+    [this.cx, this.vx] = smoothDamp(this.cx, targetX, this.vx ?? 0, smooth, dt);
+    [this.cz, this.vz] = smoothDamp(this.cz, targetZ, this.vz ?? 0, smooth, dt);
     let amount = 0;
     this.shakes = this.shakes.filter((s) => now < s.until);
     for (const s of this.shakes) amount = Math.max(amount, s.amount * ((s.until - now) / s.duration));
@@ -47,7 +50,7 @@ export class View {
     this.shakeY = (Math.random() - 0.5) * amount * 0.6 + step * 0.5;
   }
 
-  snap(x, z) { this.cx = x; this.cz = z; }
+  snap(x, z) { this.cx = x; this.cz = z; this.vx = 0; this.vz = 0; }
 
   /** Точка мира → экран (пиксели канваса). */
   project(x, z, y = 0) {
@@ -214,6 +217,17 @@ class OffscreenCanvasShim {
   }
   get width() { return this.canvas.width; }
   get height() { return this.canvas.height; }
+}
+
+/** Плавное приближение к цели с сохранением скорости (критическое затухание). */
+function smoothDamp(current, target, velocity, time, dt) {
+  const omega = 2 / Math.max(0.0001, time);
+  const x = omega * dt;
+  const exp = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);
+  const change = current - target;
+  const temp = (velocity + omega * change) * dt;
+  const newVelocity = (velocity - omega * temp) * exp;
+  return [target + (change + temp) * exp, newVelocity];
 }
 
 /** Цвет '#rrggbb' умножить на k (светлее > 1, темнее < 1). */
