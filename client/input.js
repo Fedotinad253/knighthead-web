@@ -1,5 +1,6 @@
 // Клавиатура и мышь с переназначаемым управлением (сохраняется в localStorage).
-// У каждого действия до двух кнопок: клавиши (KeyboardEvent.code) или кнопки мыши (Mouse0 — левая, Mouse2 — правая).
+// У каждого действия до двух кнопок: клавиши (KeyboardEvent.code) или кнопки мыши: Mouse0 — левая, Mouse1 — колесо,
+// Mouse2 — правая, Mouse3 и Mouse4 — боковые («назад» и «вперёд»).
 const STORAGE = 'knighthead.bindings';
 
 export const ACTIONS = [
@@ -19,7 +20,7 @@ export const DEFAULT_BINDINGS = {
 /** Как показать кнопку игроку. */
 export function keyName(code) {
   if (!code) return '—';
-  const names = { Mouse0: 'ЛКМ', Mouse1: 'СКМ', Mouse2: 'ПКМ', Space: 'Пробел', ShiftLeft: 'Shift', ShiftRight: 'Правый Shift',
+  const names = { Mouse0: 'ЛКМ', Mouse1: 'Колесо', Mouse2: 'ПКМ', Mouse3: 'Мышь 4 (назад)', Mouse4: 'Мышь 5 (вперёд)', Space: 'Пробел', ShiftLeft: 'Shift', ShiftRight: 'Правый Shift',
     ControlLeft: 'Ctrl', ControlRight: 'Правый Ctrl', AltLeft: 'Alt', AltRight: 'Правый Alt', Escape: 'Esc', Backspace: 'Backspace',
     Enter: 'Enter', Tab: 'Tab', ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Backquote: '`', CapsLock: 'CapsLock' };
   if (names[code]) return names[code];
@@ -55,7 +56,9 @@ export class Input {
       this.mouseX = (e.clientX - r.left) * (canvas.width / r.width);
       this.mouseY = (e.clientY - r.top) * (canvas.height / r.height);
     });
-    canvas.addEventListener('mousedown', (e) => { if (e.button <= 2) press(`Mouse${e.button}`); });
+    canvas.addEventListener('mousedown', (e) => { if (e.button <= 4) press(`Mouse${e.button}`); });
+    // Боковые кнопки и колесо не должны листать историю браузера или включать прокрутку.
+    for (const type of ['mousedown', 'mouseup', 'auxclick']) addEventListener(type, (e) => { if (e.button === 1 || e.button >= 3) e.preventDefault(); });
     addEventListener('mousedown', (e) => { if (this.capture && e.target.closest?.('#controls')) { e.preventDefault(); press(`Mouse${e.button}`); } }, true);
     addEventListener('mouseup', (e) => this.down.delete(`Mouse${e.button}`));
     addEventListener('contextmenu', (e) => { if (e.target === canvas || this.capture) e.preventDefault(); });
