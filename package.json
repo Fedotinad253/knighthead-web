@@ -1,0 +1,14 @@
+{
+  "name": "knighthead-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "KnightHead в браузере: кооп-боссраш по славянской мифологии. Без движка и без зависимостей.",
+  "type": "module",
+  "scripts": {
+    "start": "node server/server.js",
+    "test": "node server/selftest.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

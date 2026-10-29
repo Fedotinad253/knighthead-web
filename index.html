@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KnightHead</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="client/style.css">
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="hud" hidden>
+    <div id="me" class="panel">
+      <div class="row"><span id="me-name">Богатырь</span><span id="me-weapon"></span></div>
+      <div class="bar"><div id="me-hp" class="fill hp"></div></div>
+      <div id="cards" class="cards"></div>
+      <div class="row small"><span id="dash">Рывок</span><span id="parry">Парирование</span></div>
+    </div>
+    <div id="mate" class="panel small" hidden>
+      <div class="row"><span id="mate-name">Напарник</span></div>
+      <div class="bar thin"><div id="mate-hp" class="fill hp mate"></div></div>
+    </div>
+    <div id="boss" hidden>
+      <div id="boss-name"></div>
+      <div class="bar boss"><div id="boss-hp" class="fill"></div></div>
+      <div id="boss-phase" class="small"></div>
+    </div>
+    <div id="worlds" class="panel" hidden></div>
+    <div id="prompt" hidden></div>
+    <div id="revive" hidden><div class="bar thin"><div id="revive-fill" class="fill"></div></div></div>
+    <div id="hint" class="small"></div>
+    <div id="announce"></div>
+    <div id="dialogue" hidden><div id="dialogue-speaker"></div><div id="dialogue-text"></div><div class="small dim">E — дальше, Esc — закрыть</div></div>
+    <div id="stone" hidden>
+      <div id="stone-title"></div>
+      <div id="stone-description" class="small"></div>
+      <div id="stone-lines"></div>
+      <button id="stone-close" class="button">Отойти (Esc)</button>
+    </div>
+    <div id="help" hidden>
+      <h2>Управление</h2>
+      <table>
+        <tr><td>WASD / стрелки</td><td>бег (на карте — бег избушки)</td></tr>
+        <tr><td>Мышь</td><td>прицел</td></tr>
+        <tr><td>ЛКМ / ПКМ</td><td>лёгкая / тяжёлая атака</td></tr>
+        <tr><td>Shift + атака</td><td>карта: + лёгкая — серия, + тяжёлая — мгновенный удар</td></tr>
+        <tr><td>Пробел</td><td>рывок (неуязвимость в начале)</td></tr>
+        <tr><td>V</td><td>парирование розовых атак (окно 1 с)</td></tr>
+        <tr><td>E</td><td>взаимодействие; удерживать — поднять напарника</td></tr>
+        <tr><td>Esc</td><td>назад (от карты, от камня)</td></tr>
+        <tr><td>F1</td><td>эта подсказка</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div id="menu">
+    <h1>KnightHead</h1>
+    <p class="subtitle">Боссраш по славянской мифологии</p>
+    <p id="menu-status">Загрузка…</p>
+    <button id="play" class="button big" disabled>Войти в избушку</button>
+    <p class="small dim">F1 — управление.</p>
+  </div>
+
+  <script type="module" src="client/main.js"></script>
+</body>
+</html>
