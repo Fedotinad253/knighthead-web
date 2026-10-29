@@ -4,6 +4,8 @@
 export const PITCH = 55 * Math.PI / 180;
 export const SIN = Math.sin(PITCH);
 export const COS = Math.cos(PITCH);
+/** Насколько близко камера: меньше — ближе. */
+const CLOSENESS = 0.7;
 
 export class View {
   constructor(canvas) {
@@ -27,8 +29,8 @@ export class View {
     this.dpr = dpr;
   }
 
-  /** Пикселей на метр: камера на расстоянии distance видит по вертикали ~distance метров. */
-  get s() { return this.h / (this.distance * this.zoom); }
+  /** Пикселей на метр: камера на расстоянии distance видит по вертикали ~0.7 × distance метров. */
+  get s() { return this.h / (this.distance * this.zoom * CLOSENESS); }
 
   shake(amount, duration, now) { this.shakes.push({ amount, until: now + duration, duration }); }
 
