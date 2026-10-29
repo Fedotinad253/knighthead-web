@@ -152,6 +152,8 @@ class Game {
       ? { ...h, x: h.x + h.vx * age, z: h.z + h.vz * age } : h);
     // Когти Лиха — опасность у его рук, пока идёт выпад или бег.
     const b = this.boss;
+    // Тело Лиха ранит при столкновении (кроме укрытия и обессиленного); повторно — после неуязвимости.
+    if (b?.contact) list.push({ id: 'body', key: 'body', repeat: true, type: 'body', x: b.x, z: b.z, r: (b.radius ?? 0.55) + 0.2, dmg: b.contact });
     if (b?.claws) list.push({ id: 'claws', key: `claws:${b.claws.token}`, type: 'claws', x: b.x + b.fx * 0.6, z: b.z + b.fz * 0.6, r: 1.3, dmg: b.claws.damage });
     return list;
   }

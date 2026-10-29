@@ -16,7 +16,12 @@ const P = {
   misfortuneInterval: [5, 8], slipperyDuration: 1.2, branchTelegraph: 1.1, branchRadius: 1.6, branchDamage: 15,
   chargeSpeed: 13, chargeDamage: 22, stunTime: 2.5, flailRadius: 3.6, flailDamage: 18,
   bodyRadius: 0.55,
+  /** Урон от столкновения с телом Лиха. */
+  contactDamage: 10,
 };
+
+/** Позы, в которых тело не ранит: спряталось, обессилело, мёртвое. */
+const HARMLESS = new Set(['Hidden', 'Peek', 'HiddenTree', 'PeekTree', 'Exhausted', 'Finisher', 'Dead']);
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const rotate = (x, z, degrees) => {
@@ -75,8 +80,12 @@ export class Likho {
       hp: Math.round(this.health.hp), max: Math.round(this.health.max), pose: this.pose, phase: this.phase,
       eyeBlind: this.eyeBlind, finisherReady: this.finisherReady, cutscene: this.cutscene,
       claws: this.claws.active ? { token: this.claws.token, damage: this.claws.damage } : null,
+      contact: this.contactDamage,
     };
   }
+
+  /** Сколько ранит столкновение с телом сейчас (0 — не ранит). */
+  get contactDamage() { return this.dead || this.cutscene || HARMLESS.has(this.pose) ? 0 : P.contactDamage; }
 
   applyDamage(amount) { return this.health.apply(amount, (dealt) => this.game.showDamage(this.x, this.z, dealt)); }
 

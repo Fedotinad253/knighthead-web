@@ -38,19 +38,37 @@
       <div id="stone-lines"></div>
       <button id="stone-close" class="button">Отойти (Esc)</button>
     </div>
-    <div id="help" hidden>
+    <div id="controls" class="overlay" hidden>
       <h2>Управление</h2>
-      <table>
-        <tr><td>WASD / стрелки</td><td>бег (на карте — бег избушки)</td></tr>
-        <tr><td>Мышь</td><td>прицел</td></tr>
-        <tr><td>ЛКМ / ПКМ</td><td>лёгкая / тяжёлая атака</td></tr>
-        <tr><td>Shift + атака</td><td>карта: + лёгкая — серия, + тяжёлая — мгновенный удар</td></tr>
-        <tr><td>Пробел</td><td>рывок (неуязвимость в начале)</td></tr>
-        <tr><td>V</td><td>парирование розовых атак (окно 1 с)</td></tr>
-        <tr><td>E</td><td>взаимодействие; удерживать — поднять напарника</td></tr>
-        <tr><td>Esc</td><td>назад (от карты, от камня)</td></tr>
-        <tr><td>F1</td><td>эта подсказка</td></tr>
-      </table>
+      <p class="small dim">Нажмите на кнопку и затем новую клавишу или кнопку мыши. Esc — отмена.</p>
+      <table id="controls-table"></table>
+      <div class="row"><button id="controls-reset" class="button">Как было</button><button id="controls-close" class="button">Готово</button></div>
+    </div>
+    <div id="debug" class="overlay" hidden>
+      <h2>Отладка</h2>
+      <div class="debug-grid">
+        <label><input type="checkbox" id="dbg-god"> Бессмертие</label>
+        <label><input type="checkbox" id="dbg-auto"> Босс сам теряет здоровье</label>
+        <label><input type="checkbox" id="dbg-hitbox"> Показать зоны урона</label>
+      </div>
+      <div class="debug-grid">
+        <button class="button" data-cmd="heal">Полное здоровье</button>
+        <button class="button" data-cmd="cards">5 карт</button>
+        <button class="button" data-cmd="bossDamage">Боссу −25%</button>
+        <button class="button" data-cmd="nextPhase">Следующая фаза</button>
+        <button class="button" data-cmd="killBoss">Убить босса</button>
+        <button class="button" data-cmd="tavern">В таверну</button>
+        <button class="button" data-cmd="map">На карту</button>
+        <button class="button" data-cmd="unlock">Открыть все миры</button>
+        <button class="button" data-cmd="resetProgress">Сбросить прогресс</button>
+      </div>
+      <div class="row">
+        <select id="dbg-boss"></select>
+        <select id="dbg-difficulty"></select>
+        <button class="button" id="dbg-fight">В бой</button>
+      </div>
+      <p class="small dim">F3 — закрыть</p>
+    </div>
     </div>
   </div>
 
@@ -59,7 +77,8 @@
     <p class="subtitle">Боссраш по славянской мифологии</p>
     <p id="menu-status">Загрузка…</p>
     <button id="play" class="button big" disabled>Войти в избушку</button>
-    <p class="small dim">F1 — управление.</p>
+    <p class="small dim">F1 — управление (можно переназначить), F3 — отладка.</p>
+    <button id="menu-controls" class="button">Управление</button>
   </div>
 
   <script type="module" src="client/main.js"></script>

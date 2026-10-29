@@ -311,7 +311,7 @@ export class LocalPlayer {
       if (this.processed.has(h.key)) continue;
       // Во время неуязвимости опасность не помечаем: если всё ещё касается — ударит позже.
       if (this.invulnerable) continue;
-      this.processed.set(h.key, this.now);
+      if (!h.repeat) this.processed.set(h.key, this.now);
       this.invulnerableUntil = this.now + P.hitInvulnerability;
       this.blinkUntil = this.now + P.hitInvulnerability;
       game.send({ t: 'hurt', hazard: h.id, damage: h.dmg });

@@ -5,6 +5,7 @@ import { SCENES } from '../shared/scenes.js';
 import { assets } from './assets.js';
 import { shade, SIN } from './view.js';
 import { drawParryRing } from './vfx.js';
+import { keyName } from './input.js';
 
 const NPC_ART = { healer: ['characters/Healer.png', 2.05], smith: ['characters/Smith.png', 2.15] };
 
@@ -66,12 +67,25 @@ export function drawWorld(game) {
   for (const p of game.players) {
     if (!p.visible) continue;
     if (p.slippery) view.label(p.x, p.z, 3.1, '!', `rgba(217,115,255,${0.4 + 0.6 * Math.abs(Math.sin(game.now * 9))})`, 0.9);
-    if (p.downed) view.label(p.x, p.z, 1.4, 'Пал — поднимите (удерживать E)', '#ff8a80', 0.34);
+    if (p.downed) view.label(p.x, p.z, 1.4, 'Пал', '#ff8a80', 0.4);
   }
   for (const p of game.players) if (p.dropped) view.label(p.dropped[0], p.dropped[1], 1.3, 'Подобрать', '#d973ff', 0.36);
-  if (game.boss?.finisherReady) view.label(game.boss.x, game.boss.z, 3.4, '[E] Выколоть глаз', '#ffd94d', 0.5);
+  if (game.boss?.finisherReady) view.label(game.boss.x, game.boss.z, 3.4, `[${keyName(game.input.bindings.interact[0])}] Выколоть глаз`, '#ffd94d', 0.5);
   if (game.boss?.kind === 'dummy') view.label(game.boss.x, game.boss.z, 3.4, game.boss.name, '#ffe9a8', 0.4);
   game.vfx.drawTop(view);
+  if (game.showHitboxes) drawHitboxes(game);
+}
+
+/** Отладка: зоны урона (красные), тело босса (жёлтое), сам богатырь (зелёный). */
+function drawHitboxes(game) {
+  const { view } = game;
+  for (const h of game.liveHazards()) view.groundEllipse(h.x, h.z, h.r, h.r, null, h.parry ? '#ff59c7' : '#ff3b2f', 0.05);
+  if (game.boss) view.groundEllipse(game.boss.x, game.boss.z, game.boss.radius, game.boss.radius, null, '#ffd94d', 0.05);
+  const me = game.local;
+  view.groundEllipse(me.x, me.z, 0.45, 0.45, null, '#5bff7a', 0.05);
+  for (const o of game.sceneData.obstacles) {
+    if (o.type === 'circle') view.groundEllipse(o.x, o.z, o.r, o.r, null, 'rgba(120,200,255,0.7)', 0.04);
+  }
 }
 
 // ---------------------------------------------------------------- Земля
@@ -345,10 +359,10 @@ function drawOrb(view, h, now) {
   const color = h.parry ? [255, 89, 199] : [255, 140, 38];
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
-  const g = ctx.createRadialGradient(px, y, 0, px, y, r * 2);
-  g.addColorStop(0, `rgba(${color},0.9)`); g.addColorStop(1, `rgba(${color},0)`);
+  const g = ctx.createRadialGradient(px, y, r * 0.5, px, y, r * 1.25);
+  g.addColorStop(0, `rgba(${color},0.55)`); g.addColorStop(1, `rgba(${color},0)`);
   ctx.fillStyle = g;
-  ctx.beginPath(); ctx.arc(px, y, r * 2, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(px, y, r * 1.25, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
   ctx.fillStyle = h.parry ? '#ffb3e6' : '#ffd099';
   ctx.beginPath(); ctx.arc(px, y, r * 0.75, 0, Math.PI * 2); ctx.fill();

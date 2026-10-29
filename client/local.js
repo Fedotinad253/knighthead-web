@@ -25,7 +25,7 @@ export class LocalWorld {
     this.game = new Game({
       boss: params.has('boss') ? Number(params.get('boss')) : -1,
       difficulty: Number(params.get('difficulty') ?? 1),
-      debugwin: params.has('debugwin'), godmode: params.has('godmode'), quiet: false,
+      debugwin: params.has('debugwin'), godmode: params.has('godmode'), quiet: false, allowDebug: true,
     }, progress);
     // «Сокет» внутри страницы: сообщения доходят сразу.
     this.socket = { send: (text) => onMessage(JSON.parse(text)), close() {}, onmessage: null, onclose: null };

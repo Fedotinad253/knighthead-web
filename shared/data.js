@@ -110,7 +110,7 @@ export const PLAYER = {
   speed: 5.5, acceleration: 65, deceleration: 85,
   dashDistance: 4.5, dashDuration: 0.16, dashCooldown: 0.35, dashInvulnerability: 0.2,
   parryWindow: 1, parryCooldown: 0.4, parryInvulnerability: 0.5,
-  hurtRadius: 0.45, hitInvulnerability: 2, blinkRate: 5, blinkBrightness: 0.55,
+  hurtRadius: 0.45, hitInvulnerability: 1, blinkRate: 6, blinkBrightness: 0.55,
   radius: 0.4, maxHealth: 100,
   reviveRadius: 2.2, reviveDuration: 2, reviveHealth: 0.5,
   inputBuffer: 0.2,

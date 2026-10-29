@@ -161,7 +161,28 @@ export class Game {
         break;
       case 'closeStone': this.stoneOpen = false; this.stoneBoss = -1; break;
       case 'leaveMap': if (this.state === SESSION.MAP && !this.stoneOpen) this.goTo(SESSION.TAVERN); break;
+      case 'debug': if (this.flags.allowDebug) this.debug(player, m); break;
     }
+  }
+
+  /** Отладочное меню (только в одиночной игре). */
+  debug(player, m) {
+    const boss = this.boss;
+    switch (m.cmd) {
+      case 'godmode': this.flags.godmode = !!m.on; break;
+      case 'debugwin': this.flags.debugwin = !!m.on; break;
+      case 'heal': player.hp = PLAYER.maxHealth; player.downed = false; break;
+      case 'cards': player.cards = CARDS.max; break;
+      case 'bossDamage': if (boss) { const h = boss.health; h.hp = Math.max(h.floor, h.hp - h.max * 0.25); } break;
+      case 'nextPhase': if (boss) { const h = boss.health; h.hp = h.floor; if (h.floor <= 0) h.onDepleted?.(); } break;
+      case 'killBoss': if (boss) { boss.health.hp = 0; boss.health.onDepleted?.(); } break;
+      case 'tavern': this.goTo(SESSION.TAVERN); break;
+      case 'map': this.goTo(SESSION.MAP); break;
+      case 'fight': this.startBoss(m.boss | 0, m.d | 0); break;
+      case 'unlock': this.results = this.results.map((r) => Math.max(r, 1)); this.progress.save(this.results); break;
+      case 'resetProgress': this.results = this.results.map(() => -1); this.progress.save(this.results); break;
+    }
+    this.log(`Отладка: ${m.cmd}`);
   }
 
   interact(player, id) {
@@ -178,6 +199,9 @@ export class Game {
     if (m.hazard === 'claws') {
       if (!this.boss?.claws?.active) return;
       damage = this.boss.claws.damage;
+    } else if (m.hazard === 'body') {
+      damage = this.boss?.contactDamage ?? 0;
+      if (!damage) return;
     } else {
       const hazard = this.hazards.find((h) => h.id === m.hazard);
       if (hazard) {

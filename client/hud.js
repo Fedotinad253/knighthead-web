@@ -2,6 +2,7 @@
 // диалог с NPC, камень на распутье (выбор сложности), прогресс миров на карте, подсказка управления.
 import { WEAPONS, BOSSES, DIFFICULTIES, WORLDS, CARDS, PLAYER, SESSION } from '../shared/data.js';
 import { MAP, nodeNear } from '../shared/scenes.js';
+import { ACTIONS, keyName } from './input.js';
 
 const $ = (id) => document.getElementById(id);
 const PHASES = { likho: ['Из кустов', 'Ползучее', 'Слепое бешенство'] };
@@ -15,6 +16,53 @@ export class Hud {
     this.stoneKey = '';
     $('cards').innerHTML = Array.from({ length: CARDS.max }, () => '<div class="card"><i></i></div>').join('');
     $('stone-close').onclick = () => game.send({ t: 'closeStone' });
+    $('controls-close').onclick = () => this.toggle('controls', false);
+    $('controls-reset').onclick = () => { game.input.reset(); this.renderControls(); };
+    $('menu-controls').onclick = () => this.toggle('controls', true);
+    this.setupDebug();
+  }
+
+  // ---------------------------------------------------------------- Управление и отладка
+
+  /** Открыть/закрыть панель (controls или debug). Пока панель открыта, богатырь не слушает ввод. */
+  toggle(id, open = $(id).hidden) {
+    $(id).hidden = !open;
+    if (id === 'controls' && open) this.renderControls();
+    if (id === 'debug' && open) this.syncDebug();
+    this.game.input.enabled = $('controls').hidden && $('debug').hidden;
+  }
+
+  renderControls() {
+    const input = this.game.input;
+    const table = $('controls-table');
+    table.innerHTML = ACTIONS.map(([action, label]) =>
+      `<tr><td>${label}</td>${[0, 1].map((slot) => `<td><button class="bind" data-action="${action}" data-slot="${slot}">${keyName(input.bindings[action][slot])}</button></td>`).join('')}</tr>`).join('');
+    for (const button of table.querySelectorAll('.bind')) button.onclick = () => {
+      button.textContent = 'нажмите…';
+      button.classList.add('listening');
+      input.listen((code) => {
+        if (code !== 'Escape') input.bind(button.dataset.action, Number(button.dataset.slot), code);
+        this.renderControls();
+      });
+    };
+  }
+
+  setupDebug() {
+    const game = this.game;
+    $('dbg-boss').innerHTML = BOSSES.map((b, i) => `<option value="${i}">${b.name}</option>`).join('');
+    $('dbg-difficulty').innerHTML = DIFFICULTIES.map((d, i) => `<option value="${i}"${i === 1 ? ' selected' : ''}>${d.name}</option>`).join('');
+    $('dbg-fight').onclick = () => game.send({ t: 'debug', cmd: 'fight', boss: Number($('dbg-boss').value), d: Number($('dbg-difficulty').value) });
+    $('dbg-god').onchange = (e) => game.send({ t: 'debug', cmd: 'godmode', on: e.target.checked });
+    $('dbg-auto').onchange = (e) => game.send({ t: 'debug', cmd: 'debugwin', on: e.target.checked });
+    $('dbg-hitbox').onchange = (e) => { game.showHitboxes = e.target.checked; };
+    for (const button of document.querySelectorAll('#debug [data-cmd]')) button.onclick = () => game.send({ t: 'debug', cmd: button.dataset.cmd });
+  }
+
+  syncDebug() {
+    const flags = this.game.world?.game.flags ?? {};
+    $('dbg-god').checked = !!flags.godmode;
+    $('dbg-auto').checked = !!flags.debugwin;
+    $('dbg-hitbox').checked = !!this.game.showHitboxes;
   }
 
   show() { $('hud').hidden = false; }
@@ -41,14 +89,18 @@ export class Hud {
   update() {
     const game = this.game, input = game.input, now = game.now;
     if (now > this.announceUntil) $('announce').style.opacity = 0;
-    if (input.keyPressed('F1')) $('help').hidden = !$('help').hidden;
+    if (!input.capture) {
+      if (input.hitAlways('help')) this.toggle('controls');
+      if (input.hitAlways('debug')) this.toggle('debug');
+      if (!$('controls').hidden && input.hitAlways('back')) this.toggle('controls', false);
+    }
 
     // Диалог: закрыть, листать, или закрыть, если отошёл.
     if (this.dialogueOpen) {
       const item = this.dialogueItem, local = game.local;
       const far = !local || Math.hypot(item.x - local.x, item.z - local.z) > item.radius + 0.6;
       if (input.backPressed || far || game.session?.state !== SESSION.TAVERN) $('dialogue').hidden = true;
-      else if (input.interactPressed) { this.dialogue(item); input.pressed.delete('KeyE'); }
+      else if (input.interactPressed) { this.dialogue(item); for (const c of input.bindings.interact) input.pressed.delete(c); }
     }
 
     const session = game.session, me = game.me;
@@ -99,18 +151,20 @@ export class Hud {
       const node = nodeNear(...(game.session.hut ?? MAP.nodes[0]));
       if (node > 0 && !game.session.stoneOpen) {
         const boss = BOSSES[node - 1];
-        text = game.isWorldUnlocked(boss.world) ? `[E] В бой: ${boss.name}` : 'Путь закрыт';
+        text = game.isWorldUnlocked(boss.world) ? `[${keyName(game.input.bindings.interact[0])}] В бой: ${boss.name}` : 'Путь закрыт';
       }
-    } else if (local?.reviveTarget) text = `Удерживай [E] — поднять Богатыря ${local.reviveTarget.slot + 1}`;
-    else if (local?.focused && !this.dialogueOpen) text = `[E] ${local.focused.prompt}`;
+    } else if (local?.reviveTarget) text = `Удерживай [${keyName(game.input.bindings.interact[0])}] — поднять Богатыря ${local.reviveTarget.slot + 1}`;
+    else if (local?.focused && !this.dialogueOpen) text = `[${keyName(game.input.bindings.interact[0])}] ${local.focused.prompt}`;
     $('prompt').hidden = !text;
     $('prompt').textContent = text;
     $('revive').hidden = !(local?.reviveProgress > 0);
     if (local?.reviveProgress > 0) $('revive-fill').style.width = `${(local.reviveProgress / PLAYER.reviveDuration) * 100}%`;
 
+    const k = (action) => keyName(game.input.bindings[action][0]);
+    const move = ['up', 'left', 'down', 'right'].map(k).join('');
     $('hint').textContent = onMap
-      ? (game.session.stoneOpen ? '1 / 2 / 3 — выбрать сложность     Esc — отойти' : 'WASD — бежать избушкой     E — в бой у логова     Esc — отойти от карты')
-      : 'ЛКМ/ПКМ — атаки   Shift — карта   Пробел — рывок   V — парирование   E — действие   F1 — управление';
+      ? (game.session.stoneOpen ? `1 / 2 / 3 — выбрать сложность     ${k('back')} — отойти` : `${move} — бежать избушкой     ${k('interact')} — в бой у логова     ${k('back')} — отойти от карты`)
+      : `${k('light')}/${k('heavy')} — атаки   ${k('card')} — карта   ${k('dash')} — рывок   ${k('parry')} — парирование   ${k('interact')} — действие   ${k('help')} — управление   ${k('debug')} — отладка`;
   }
 
   updateMap(onMap) {
