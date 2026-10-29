@@ -3,6 +3,7 @@
 import { WEAPONS, BOSSES, DIFFICULTIES, WORLDS, CARDS, PLAYER, SESSION } from '../shared/data.js';
 import { MAP, nodeNear } from '../shared/scenes.js';
 import { ACTIONS, keyName } from './input.js';
+import { getVolume, setVolume, unlockAudio, blip } from './assets.js';
 
 const $ = (id) => document.getElementById(id);
 const PHASES = { likho: ['Из кустов', 'Ползучее', 'Слепое бешенство'] };
@@ -19,6 +20,11 @@ export class Hud {
     $('controls-close').onclick = () => this.toggle('controls', false);
     $('controls-reset').onclick = () => { game.input.reset(); this.renderControls(); };
     $('menu-controls').onclick = () => this.toggle('controls', true);
+    // Громкость: двигаешь — сразу слышно взмах на новой громкости.
+    const showVolume = () => { $('volume').value = Math.round(getVolume() * 100); $('volume-value').textContent = `${Math.round(getVolume() * 100)}%`; };
+    $('volume').oninput = () => { setVolume(Number($('volume').value) / 100); showVolume(); };
+    $('volume').onchange = () => { unlockAudio(); blip('slash'); };
+    showVolume();
     this.setupDebug();
   }
 

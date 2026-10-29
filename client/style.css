@@ -99,3 +99,6 @@ canvas#game { position: fixed; inset: 0; width: 100vw; height: 100vh; display: b
   #announce { font-size: 26px; }
 }
 #debug .row { flex-wrap: wrap; gap: 8px; }
+.volume { display: flex; align-items: center; gap: 12px; margin: 8px 0; font-size: 16px; color: var(--gold); }
+.volume input { flex: 1; accent-color: #d99a2a; }
+#volume-value { min-width: 3em; text-align: right; color: var(--ink); }

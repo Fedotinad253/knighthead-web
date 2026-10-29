@@ -141,7 +141,7 @@ export class LocalPlayer {
     this.dashStart = this.now;
     this.dashEnd = this.now + P.dashDuration;
     this.nextDash = this.dashEnd + P.dashCooldown;
-    blip({ freq: 500, to: 180, duration: 0.12, type: 'sine', volume: 0.05, noise: 0.05 });
+    blip('dash');
   }
 
   stun(seconds) {
@@ -255,14 +255,14 @@ export class LocalPlayer {
 
     if (step.projectile) {
       game.send({ t: 'fire', x: r2(this.x + this.aimX * 0.6), z: r2(this.z + this.aimZ * 0.6), dx: this.aimX, dz: this.aimZ, kind: a.kind, step: a.index });
-      blip({ freq: 900, to: 300, duration: 0.08, type: 'triangle', volume: 0.06 });
+      blip('shot');
       return;
     }
 
     const color = card ? 'rgba(255,204,51,0.6)' : 'rgba(255,255,255,0.35)';
     game.vfx.slash(this.x, this.z, this.aimX, this.aimZ, step.range, step.arc, color);
     game.send({ t: 'fx', fx: 'slash', x: r2(this.x), z: r2(this.z), dx: this.aimX, dz: this.aimZ, range: step.range, arc: step.arc, color });
-    blip({ freq: 320, to: 120, duration: 0.1, type: 'sawtooth', volume: 0.04, noise: 0.06 });
+    blip('slash');
 
     // Попадание: расстояние до края тела босса и угол дуги.
     const boss = game.boss;
@@ -316,7 +316,7 @@ export class LocalPlayer {
       this.blinkUntil = this.now + P.hitInvulnerability;
       game.send({ t: 'hurt', hazard: h.id, damage: h.dmg });
       game.view.shake(0.15, 0.2, this.now);
-      blip({ freq: 140, to: 60, duration: 0.2, type: 'square', volume: 0.08, noise: 0.08 });
+      blip('hurt');
       if (h.stun > 0) this.stun(h.stun);
       if (h.type === 'proj') game.removeHazardLocally(h.id);
     }
