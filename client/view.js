@@ -5,7 +5,7 @@ export const PITCH = 55 * Math.PI / 180;
 export const SIN = Math.sin(PITCH);
 export const COS = Math.cos(PITCH);
 /** Насколько близко камера: меньше — ближе. */
-const CLOSENESS = 0.7;
+const CLOSENESS = 0.8;
 
 export class View {
   constructor(canvas) {
