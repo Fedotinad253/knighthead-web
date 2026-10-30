@@ -378,6 +378,7 @@ function target(pose, t) {
     case 'Exhausted': set({ kneel: 1, bodyDrop: 0.52, lean: -50, head: -28, armL: 20, armR: 25, glow: 0.3 }); break;
     case 'Finisher': set({ kneel: 1, bodyDrop: 0.52, lean: -30, head: 25, armL: -60, armR: 70 }); shake = 0.08; break;
     case 'Blind': set({ lean: -10 + Math.sin(t * 3) * 8, head: Math.sin(t * 2.3) * 15, armL: -28, armR: 30 }); shake = 0.02; break;
+    case 'Listen': set({ lean: -6, head: 28 + Math.sin(t * 12) * 3, armL: -18, armR: 22, handL: -10, handR: 10 }); break;
     case 'Charge': set({ lean: -50, head: 15, armL: 70, armR: 75, handL: 15, handR: 15 }); break;
     case 'Stunned': set({ lean: -15, head: Math.sin(t * 5) * 20, armL: 6, armR: 8 }); wobble = 12; break;
     case 'Flail': set({ lean: -5 }); flail = 1; shake = 0.03; break;

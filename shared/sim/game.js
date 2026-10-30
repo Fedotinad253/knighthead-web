@@ -103,9 +103,12 @@ export class Game {
         if (m.fills) this.addCards(player, dealt / CARDS.damagePerCard);
         break;
       }
-      case 'fire': this.firePlayer(player, m); break;
+      case 'fire': this.firePlayer(player, m); this.boss?.hear?.(player.x, player.z); break;
       case 'spendCard': player.cards = Math.max(0, player.cards - 1); break;
-      case 'fx': this.broadcast({ ...m, id: player.id }, player); break;
+      case 'fx':
+        this.broadcast({ ...m, id: player.id }, player);
+        if (m.fx === 'slash') this.boss?.hear?.(player.x, player.z);
+        break;
 
       case 'hurt': this.hurt(player, m); break;
       case 'parried': {

@@ -15,6 +15,10 @@ const P = {
   throwDamage: 14, throwSpeed: 10, throwRest: 1.5, trapDamage: 15, trapStun: 1.2,
   misfortuneInterval: [5, 8], slipperyDuration: 1.2, branchTelegraph: 1.1, branchRadius: 1.6, branchDamage: 15,
   chargeSpeed: 13, chargeDamage: 22, stunTime: 2.5, flailRadius: 3.6, flailDamage: 18,
+  /** Слепое Лихо слышит атаки: сколько прислушивается и во сколько раз быстрее бросается на звук. */
+  listenTime: 0.45, rushSpeedup: 1.5, hearingMemory: 3,
+  /** Сколько лежит без сил, ожидая добивания, прежде чем подняться. */
+  finisherWindow: 6,
   bodyRadius: 0.55,
   /** Урон от столкновения с телом Лиха. */
   contactDamage: 10,
@@ -112,9 +116,12 @@ export class Likho {
     this.tasks.start(this.misfortunes());
 
     this.setPhase(2, 1 / 3);
-    while (!this.atFloor && !this.dead) yield* this.crawlCycle();
-
-    yield* this.exhaustedAndFinisher();
+    // Не выкололи глаз вовремя — Лихо поднимается и ползёт снова, пока опять не обессилеет.
+    for (;;) {
+      while (!this.atFloor && !this.dead) yield* this.crawlCycle();
+      if (this.dead) return;
+      if (yield* this.exhaustedAndFinisher()) break;
+    }
 
     this.setPhase(3, 0);
     while (!this.dead) yield* this.blindCycle();
@@ -369,12 +376,31 @@ export class Likho {
     this.finisherReady = true;
     this.game.announce('Лихо обессилело! Подойди и нажми E');
 
-    const autoAt = this.now + 3;
-    while (!this.finisher && !this.dead) {
+    const autoAt = this.now + 3, riseAt = this.now + P.finisherWindow;
+    let warned = false;
+    while (!this.finisher && !this.dead && this.now < riseAt) {
       if (this.game.flags.debugwin && this.now > autoAt) this.finisher = this.game.anyPlayer();
+      if (!warned && riseAt - this.now < 2) {
+        warned = true;
+        this.game.floatText(this.x, this.z, 3.2, 'Поднимается!', '#ff8a50', 1.6);
+      }
       yield;
     }
     this.finisherReady = false;
+    if (this.dead) return true;
+
+    if (!this.finisher) {
+      // Не успели: встаёт с половиной здоровья второй фазы.
+      this.pose = 'Rise';
+      this.game.announce('Лихо поднялось!');
+      this.game.shake(0.3, 0.6);
+      this.health.hp = Math.max(this.health.hp, this.health.floor + (this.health.max * 2 / 3 - this.health.floor) / 2);
+      yield* this.wait(0.8, false);
+      this.health.invulnerable = false;
+      this.transition = false;
+      this.harmlessUntil = this.now + 1;
+      return false;
+    }
 
     // Сценка: богатырь перед Лихом, камера наезжает, удар в глаз, рёв.
     this.cutscene = true;
@@ -395,6 +421,7 @@ export class Likho {
     // Богатырь стоит вплотную после сценки — даём отойти, прежде чем тело снова ранит.
     this.transition = false;
     this.harmlessUntil = this.now + 1.5;
+    return true;
   }
 
   /** Игрок нажал E над обессилевшим Лихом. */
@@ -404,7 +431,19 @@ export class Likho {
 
   // ---------------------------------------------------------------- Фаза 3
 
+  /** Богатырь атаковал (удар, выстрел, взмах мимо) — слепое Лихо это слышит. */
+  hear(x, z) {
+    if (this.phase === 3 && !this.dead) this.noise = { x, z, time: this.now };
+  }
+
   *blindCycle() {
+    // Услышало удар — прислушивается и бросается на звук.
+    if (this.noise && this.now - this.noise.time < P.hearingMemory) {
+      const { x, z } = this.noise;
+      this.noise = null;
+      yield* this.listenAndRush(x, z);
+      return;
+    }
     const flailChance = this.d.extra ? 0.45 : 0.3;
     // Бешеное размахивание не повторяется подряд — иначе приходится просто ждать в стороне.
     const flail = !this.lastWasFlail && Math.random() < flailChance;
@@ -422,14 +461,38 @@ export class Likho {
     [dx, dz] = rotate(dx, dz, rand(-30, 30));
     this.face(dx, dz);
     this.game.telegraphLine(this.x, this.z, dx, dz, 6, 1.6, this.tele(0.55));
-    yield* this.wait(this.tele(0.55), false);
+    // Пока готовится к броску, услышало удар — бросается на звук.
+    const end = this.now + this.tele(0.55);
+    while (this.now < end && !this.dead && !this.noise) yield;
+    if (this.noise) { const { x, z } = this.noise; this.noise = null; yield* this.listenAndRush(x, z); return; }
 
+    yield* this.runCharge(dx, dz, 18, this.fast(P.chargeSpeed));
+  }
+
+  /** Замирает и прислушивается (подсказка), затем быстро бежит туда, где был звук. */
+  *listenAndRush(x, z) {
+    let [dx, dz] = norm(x - this.x, z - this.z);
+    if (!dx && !dz) [dx, dz] = [this.fx, this.fz];
+    this.face(dx, dz);
+    this.pose = 'Listen';
+    const length = Math.min(18, Math.hypot(x - this.x, z - this.z) + 2.5);
+    this.game.telegraphLine(this.x, this.z, dx, dz, length, 1.6, this.tele(P.listenTime));
+    yield* this.wait(this.tele(P.listenTime), false);
+    yield* this.runCharge(dx, dz, length, this.fast(P.chargeSpeed) * P.rushSpeedup);
+  }
+
+  /** Бег вслепую. Об то же дерево второй раз подряд не бьётся — обходит его, оно его уже «знает». */
+  *runCharge(dx, dz, length, speed) {
     this.pose = 'Charge';
     this.clawsOn(P.chargeDamage);
     let hit = null, travelled = 0;
-    while (travelled < 18 && !this.dead) {
-      const step = this.fast(P.chargeSpeed) * this.dt;
+    while (travelled < length && !this.dead) {
+      const step = speed * this.dt;
       hit = this.step(dx, dz, step, false);
+      if (hit && hit === this.lastTree) {
+        hit = this.step(dx, dz, step, true);
+        if (hit === this.lastTree) hit = { edge: true };
+      }
       if (hit) break;
       travelled += step;
       yield;
@@ -437,8 +500,9 @@ export class Likho {
     this.clawsOff();
     if (this.dead) return;
 
-    // Врезалось в дерево — оглушено, бей! В край арены — просто разворачивается.
+    // Врезалось в дерево — оглушено, бей! В край арены или в знакомое дерево — просто разворачивается.
     if (hit && hit.tree) {
+      this.lastTree = hit;
       this.pose = 'Stunned';
       this.game.shake(0.3, 0.4);
       this.game.floatText(this.x, this.z, 3.4, 'Бум! Оглушено', '#ffd94d', 1.6);
