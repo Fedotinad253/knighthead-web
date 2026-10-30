@@ -106,6 +106,7 @@ class Game {
         if (this.boss) this.boss.flashUntil = this.now + 0.08;
         break;
       case 'tele': this.vfx.telegraph(m); break;
+      case 'teleCancel': this.vfx.items = this.vfx.items.filter((i) => !(i.kind === 'tele' && i.id === m.id)); break;
       case 'slippery':
         if (m.id === this.myId) {
           this.local.slipperyUntil = this.now + m.duration;

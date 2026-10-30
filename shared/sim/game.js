@@ -319,10 +319,18 @@ export class Game {
   flash(x, z, r) { this.broadcast({ t: 'flash', x, z, r }); }
   floatText(x, z, y, text, color, duration = 1.2) { this.broadcast({ t: 'text', x, z, y, text, color, duration }); }
   showDamage(x, z, amount) { this.broadcast({ t: 'damage', x, z, amount: Math.round(amount) }); }
-  telegraphCircle(x, z, r, duration, color) { this.broadcast({ t: 'tele', shape: 'circle', x, z, r, duration, color }); }
-  telegraphLine(x, z, dx, dz, length, width, duration) {
-    this.broadcast({ t: 'tele', shape: 'line', x, z, dx, dz, length, width, duration, color: 'danger' });
+  /** Подсказки атак (красные круги и полосы). Возвращают номер — чтобы убрать подсказку, если атака отменилась. */
+  telegraphCircle(x, z, r, duration, color) {
+    const id = this.nextId++;
+    this.broadcast({ t: 'tele', id, shape: 'circle', x, z, r, duration, color });
+    return id;
   }
+  telegraphLine(x, z, dx, dz, length, width, duration) {
+    const id = this.nextId++;
+    this.broadcast({ t: 'tele', id, shape: 'line', x, z, dx, dz, length, width, duration, color: 'danger' });
+    return id;
+  }
+  cancelTelegraph(id) { this.broadcast({ t: 'teleCancel', id }); }
 
   teleport(player, x, z, fx, fz) {
     player.x = x; player.z = z;
