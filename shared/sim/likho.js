@@ -248,20 +248,12 @@ export class Likho {
   *misfortunes() {
     while (!this.dead) {
       yield rand(...P.misfortuneInterval) / this.d.attackSpeed;
-      // Неудача не накладывается на атаку Лиха: ждёт, пока оно не закончит бросок, взмах или рывок.
-      while (!this.dead && (this.attacking || this.transition || this.cutscene)) yield;
-      if (this.dead) continue;
-      yield 0.3;
-      if (this.dead || this.cutscene || this.attacking) continue;
+      if (this.dead || this.cutscene) continue;
       const player = this.pickTarget();
       if (!player) continue;
       const slippery = !this.d.trimmed && Math.random() < 0.5;
       if (slippery) this.game.slippery(player, P.slipperyDuration);
-      else {
-        // Пока падает сук, Лихо новую атаку не начинает (ставится сразу, до первого кадра сука).
-        this.misfortuneUntil = this.now + this.tele(P.branchTelegraph) + 0.2;
-        this.tasks.start(this.fallingBranch(player.x, player.z));
-      }
+      else this.tasks.start(this.fallingBranch(player.x, player.z));
     }
   }
 
@@ -282,7 +274,7 @@ export class Likho {
       const tx = target.x - this.x, tz = target.z - this.z, distance = Math.hypot(tx, tz);
       const [nx, nz] = norm(tx, tz);
       if (distance < P.swipeRange) {
-        if (this.now >= this.nextSwipeAt && this.now >= (this.misfortuneUntil ?? 0)) { yield* this.swipe(target); continue; }
+        if (this.now >= this.nextSwipeAt) { yield* this.swipe(target); continue; }
         // Взмах перезаряжается — обползает богатыря сбоку, а не стоит на месте.
         this.face(tx, tz);
         const [sx, sz] = rotate(nx, nz, 90);
@@ -309,8 +301,6 @@ export class Likho {
   }
 
   *swipe(target) {
-    yield* this.waitMisfortune();
-    this.attacking = true;
     this.pose = 'Swipe';
     const [dx, dz] = norm(target.x - this.x, target.z - this.z);
     this.face(dx, dz);
@@ -319,17 +309,14 @@ export class Likho {
     yield* this.wait(this.tele(P.swipeTelegraph), false);
     this.game.spawnZone(cx, cz, 1.7, 'strike', 0.15, P.swipeDamage);
     this.nextSwipeAt = this.now + P.swipeCooldown / this.d.attackSpeed;
-    this.attacking = false;
     this.pose = 'Tired';
     yield* this.wait(this.window(P.swipeRecovery));
     this.pose = 'Crawl';
   }
 
   *throwFan() {
-    yield* this.waitMisfortune();
     const target = this.pickTarget();
     if (!target) return;
-    this.attacking = true;
     // Поднимается во весь рост, замахивается — полоса показывает, куда полетит.
     this.pose = 'Rise';
     const [dx, dz] = norm(target.x - this.x, target.z - this.z);
@@ -343,15 +330,12 @@ export class Likho {
       const [fx, fz] = rotate(dx, dz, (i - (count - 1) / 2) * 14);
       this.game.fireEnemy(this.x, this.z, fx, fz, P.throwSpeed * this.d.projectileSpeed, P.throwDamage, i === Math.floor(count / 2), 4);
     }
-    this.attacking = false;
     // Тяжело дышит — окно для ударов.
     this.pose = 'Tired';
     yield* this.wait(this.window(P.throwRest));
   }
 
   *placeTraps() {
-    yield* this.waitMisfortune();
-    this.attacking = true;
     this.pose = 'Rise';
     const count = this.d.extra ? 3 : 2;
     // Капканы не ставятся друг на друга: ни на только что выбранные места, ни на те, что уже лежат.
@@ -366,7 +350,6 @@ export class Likho {
     yield* this.wait(0.5, false);
     // Капкан: железное кольцо с зубьями, лежит 20 секунд или пока не наступят.
     for (const [x, z] of spots) this.game.spawnZone(x, z, 0.8, 'trap', 20, P.trapDamage, P.trapStun);
-    this.attacking = false;
     yield* this.wait(0.4, false);
   }
 
@@ -453,11 +436,6 @@ export class Likho {
     if (this.phase === 3 && !this.dead) this.noise = { x, z, time: this.now };
   }
 
-  /** Перед новой атакой — дождаться, пока упадёт сук от проклятия, чтобы не было двух атак сразу. */
-  *waitMisfortune() {
-    while (!this.dead && this.now < (this.misfortuneUntil ?? 0)) yield;
-  }
-
   *blindCycle() {
     // Услышало удар — прислушивается и бросается на звук.
     if (this.noise && this.now - this.noise.time < P.hearingMemory) {
@@ -474,7 +452,6 @@ export class Likho {
   }
 
   *charge() {
-    yield* this.waitMisfortune();
     const target = this.pickTarget();
     if (!target) { yield* this.wait(0.5, false); return; }
 
@@ -483,7 +460,6 @@ export class Likho {
     let [dx, dz] = norm(target.x - this.x, target.z - this.z);
     [dx, dz] = rotate(dx, dz, rand(-30, 30));
     this.face(dx, dz);
-    this.attacking = true;
     const line = this.game.telegraphLine(this.x, this.z, dx, dz, 6, 1.6, this.tele(0.55));
     // Пока готовится к броску, услышало удар — бросается на звук (старая полоса пропадает).
     const end = this.now + this.tele(0.55);
@@ -501,11 +477,9 @@ export class Likho {
 
   /** Замирает и прислушивается (подсказка), затем быстро бежит туда, где был звук. */
   *listenAndRush(x, z) {
-    yield* this.waitMisfortune();
     let [dx, dz] = norm(x - this.x, z - this.z);
     if (!dx && !dz) [dx, dz] = [this.fx, this.fz];
     this.face(dx, dz);
-    this.attacking = true;
     this.pose = 'Listen';
     const length = Math.min(18, Math.hypot(x - this.x, z - this.z) + 2.5);
     this.game.telegraphLine(this.x, this.z, dx, dz, length, 1.6, this.tele(P.listenTime));
@@ -530,7 +504,6 @@ export class Likho {
       yield;
     }
     this.clawsOff();
-    this.attacking = false;
     if (this.dead) return;
 
     // Врезалось в дерево — оглушено, бей! В край арены или в знакомое дерево — просто разворачивается.
@@ -547,8 +520,6 @@ export class Likho {
   }
 
   *flail() {
-    yield* this.waitMisfortune();
-    this.attacking = true;
     this.pose = 'Blind';
     this.game.telegraphCircle(this.x, this.z, P.flailRadius, this.tele(0.8), 'danger');
     yield* this.wait(this.tele(0.8), false);
@@ -558,7 +529,6 @@ export class Likho {
       this.game.spawnZone(this.x, this.z, P.flailRadius, 'strike', 0.15, P.flailDamage);
       yield* this.wait(0.45, false);
     }
-    this.attacking = false;
     this.pose = 'Tired';
     yield* this.wait(this.window(1), false);
   }
