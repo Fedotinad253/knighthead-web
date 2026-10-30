@@ -47,7 +47,6 @@ export class LocalPlayer {
   get invulnerable() {
     return this.now < this.invulnerableUntil || this.me?.downed || this.game.cutscene;
   }
-  get canBeInterrupted() { return !this.attack || this.phase === 'recovery'; }
   get phase() {
     const a = this.attack, s = a.step;
     return a.time < s.windup ? 'windup' : a.time < s.windup + s.active ? 'active' : 'recovery';
@@ -143,7 +142,8 @@ export class LocalPlayer {
   }
 
   tryRoll() {
-    if (this.now < this.nextRoll || !this.canBeInterrupted) return;
+    // Перекат прерывает любое действие: замах, удар, восстановление.
+    if (this.now < this.nextRoll) return;
     this.cancelAttack();
     const [mx, mz] = this.game.input.move;
     if (Math.hypot(mx, mz) > 0.05) { this.rollX = mx; this.rollZ = mz; } else { this.rollX = this.fx; this.rollZ = this.fz; }

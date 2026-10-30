@@ -1,6 +1,6 @@
 // Рисование сцен (таверна, ночной лес, арена) и всех, кто в них: богатыри, боссы, снаряды, капканы.
 // Порядок — от дальнего к ближнему (больший Z — дальше), как в 3D.
-import { WEAPONS, PLAYER_COLORS, WORLDS, BOSSES } from '../shared/data.js';
+import { WEAPONS, WORLDS, BOSSES } from '../shared/data.js';
 import { SCENES } from '../shared/scenes.js';
 import { assets } from './assets.js';
 import { shade, SIN, ORB_LIFT, ORB_RADIUS } from './view.js';
@@ -26,8 +26,6 @@ export function drawWorld(game) {
   for (const h of game.liveHazards()) if (h.type === 'zone' && h.kind === 'trap') drawTrap(view, h);
   for (const p of game.players) {
     if (!p.visible) continue;
-    view.groundEllipse(p.x, p.z, 0.55, 0.55, hexAlpha(PLAYER_COLORS[p.slot] ?? '#888', p.downed ? 0.25 : 0.55));
-    view.groundEllipse(p.x, p.z, 0.42, 0.42, 'rgba(0,0,0,0.35)');
     if (p.anim?.parry > 0) drawParryRing(view, p.x, p.z, p.anim.parry);
   }
 
@@ -279,7 +277,7 @@ function drawSprite(view, path, x, z, height, flip = false, lift = 0) {
 function drawPlayer(game, p) {
   const { view } = game;
   const ctx = view.ctx;
-  view.groundEllipse(p.x, p.z, 0.5, 0.5, 'rgba(0,0,0,0.3)');
+  softShadow(view, p.x, p.z, 0.55);
   const rig = p.rig;
   p.animator.setWeaponIfChanged(p.dropped ? null : WEAPONS[p.weapon]);
   // Перекат: кувырок вперёд вокруг середины тела с поджатием (см. bogatyrPose).
@@ -407,8 +405,19 @@ function drawTrap(view, h) {
   }
 }
 
-function hexAlpha(hex, alpha) {
-  const n = parseInt(hex.slice(1), 16);
-  return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${alpha})`;
+/** Мягкая тень у ног — без чёткого края, чтобы не выглядела кружком. */
+function softShadow(view, x, z, r) {
+  const ctx = view.ctx;
+  const [px, py] = view.project(x, z);
+  const rx = r * view.s;
+  ctx.save();
+  ctx.translate(px, py);
+  ctx.scale(1, SIN);
+  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, rx);
+  g.addColorStop(0, 'rgba(0,0,0,0.38)'); g.addColorStop(0.6, 'rgba(0,0,0,0.2)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(0, 0, rx, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
 }
+
 export { SIN };

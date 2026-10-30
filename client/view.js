@@ -35,6 +35,12 @@ export class View {
   /** Пикселей на метр: камера на расстоянии distance видит по вертикали ~0.7 × distance метров. */
   get s() { return this.h / (this.distance * this.zoom * CLOSENESS); }
 
+  /** Сколько метров видно от центра экрана при отдалении zoom: [по горизонтали, по вертикали экрана]. */
+  halfExtents(zoom = 1) {
+    const half = this.distance * zoom * CLOSENESS / 2;
+    return [half * this.w / this.h, half];
+  }
+
   shake(amount, duration, now) { this.shakes.push({ amount, until: now + duration, duration }); }
 
   /**
@@ -223,7 +229,7 @@ class OffscreenCanvasShim {
 }
 
 /** Плавное приближение к цели с сохранением скорости (критическое затухание). */
-function smoothDamp(current, target, velocity, time, dt) {
+export function smoothDamp(current, target, velocity, time, dt) {
   if (!Number.isFinite(current) || !Number.isFinite(velocity)) return [target, 0];
   if (!(dt > 0)) return [current, velocity];
   const omega = 2 / Math.max(0.0001, time);

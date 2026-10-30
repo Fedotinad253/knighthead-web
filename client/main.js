@@ -3,7 +3,7 @@
 // Сейчас игра одиночная — логика идёт прямо в странице (LocalWorld); сетевой кооп вернём позже (connect).
 import { SESSION, BOSSES } from '../shared/data.js';
 import { SCENES } from '../shared/scenes.js';
-import { View } from './view.js';
+import { View, SIN, smoothDamp } from './view.js';
 import { Input } from './input.js';
 import { assets, ALL_IMAGES, loadSound, unlockAudio, playSound } from './assets.js';
 import { createBogatyr, BogatyrAnimator, createLikho, LikhoAnimator } from './rig.js';
@@ -189,20 +189,45 @@ class Game {
     } else {
       this.view.runShake = 0;
       const cinematic = this.boss?.cutscene;
-      this.view.zoom += ((cinematic ? 0.5 : 1) - this.view.zoom) * (1 - Math.exp(-dt * 3));
-      // Как в Enter the Gungeon: камера немного смещается к курсору (на пятую часть, не дальше 2.5 м).
-      let tx = this.local.x, tz = this.local.z;
-      if (cinematic) { tx = this.boss.x; tz = this.boss.z; } else if (!this.hud.dialogueOpen) {
-        const [mx, mz] = this.view.unproject(this.input.mouseX, this.input.mouseY);
-        let ox = (mx - this.local.x) * 0.2, oz = (mz - this.local.z) * 0.2;
-        const l = Math.hypot(ox, oz);
-        if (l > 2.5) { ox *= 2.5 / l; oz *= 2.5 / l; }
-        tx += ox; tz += oz;
-      }
-      this.view.update(tx, tz, dt, this.now, cinematic ? 0.5 : 0.3);
+      const [tx, tz, zoom] = cinematic ? [this.boss.x, this.boss.z, 0.5] : this.cameraTarget();
+      // Отдаление меняется медленнее, чем сдвиг, — чтобы картинка не «дышала».
+      [this.view.zoom, this.zoomVelocity] = smoothDamp(this.view.zoom, zoom, this.zoomVelocity ?? 0, cinematic ? 0.4 : 0.8, dt);
+      this.view.update(tx, tz, dt, this.now, cinematic ? 0.5 : 0.35);
       drawWorld(this);
     }
     this.input.endFrame();
+  }
+
+  /**
+   * Куда смотрит камера в бою: богатырь в центре, чуть к курсору (как в Enter the Gungeon) и на треть
+   * пути к боссу. Если босс далеко — камера плавно отдаляется, чтобы он всегда был в кадре с запасом.
+   */
+  cameraTarget() {
+    const me = this.local;
+    let tx = me.x, tz = me.z;
+    if (!this.hud.dialogueOpen) {
+      const [mx, mz] = this.view.unproject(this.input.mouseX, this.input.mouseY);
+      let ox = (mx - me.x) * 0.15, oz = (mz - me.z) * 0.15;
+      const l = Math.hypot(ox, oz);
+      if (l > 2) { ox *= 2 / l; oz *= 2 / l; }
+      tx += ox; tz += oz;
+    }
+    const boss = this.boss;
+    if (!boss || boss.hp <= 0 && boss.pose === 'Dead') return [tx, tz, 1];
+    tx += (boss.x - me.x) * 0.33;
+    tz += (boss.z - me.z) * 0.33;
+
+    // Какое отдаление нужно, чтобы богатырь и босс (с головой и запасом по краям) влезли в кадр.
+    const [halfW, halfH] = this.view.halfExtents(1);
+    let need = 1;
+    for (const [x, z, height] of [[me.x, me.z, 2.1], [boss.x, boss.z, boss.kind === 'likho' ? 3.2 : 3.2]]) {
+      const sx = Math.abs(x - tx) + 1.2;
+      const feet = (z - tz) * SIN, head = feet + height;
+      // Сверху — полоса здоровья босса, снизу — панель богатыря: запас больше.
+      const sy = Math.max(head + 1.4, -feet + 1.6);
+      need = Math.max(need, sx / halfW, sy / halfH);
+    }
+    return [tx, tz, Math.min(1.5, need)];
   }
 
   updateEntities(dt) {
