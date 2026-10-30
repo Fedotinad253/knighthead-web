@@ -46,6 +46,9 @@ export class Likho {
     this.eyeBlind = false;
     this.finisherReady = false;
     this.cutscene = false;
+    /** Идёт переход между фазами (рёв, бессилие, добивание) — тело не ранит. До этого времени тоже не ранит. */
+    this.harmlessUntil = 0;
+    this.transition = false;
     this.claws = { id: 'claws', active: false, token: 0, damage: 0, r: 1.3, forward: 0.6 };
     this.dead = false;
     this.finisher = null;
@@ -81,11 +84,16 @@ export class Likho {
       eyeBlind: this.eyeBlind, finisherReady: this.finisherReady, cutscene: this.cutscene,
       claws: this.claws.active ? { token: this.claws.token, damage: this.claws.damage } : null,
       contact: this.contactDamage,
+      /** Где на полосе здоровья кончаются фазы (доли здоровья). */
+      phaseMarks: [2 / 3, 1 / 3],
     };
   }
 
   /** Сколько ранит столкновение с телом сейчас (0 — не ранит). */
-  get contactDamage() { return this.dead || this.cutscene || HARMLESS.has(this.pose) ? 0 : P.contactDamage; }
+  get contactDamage() {
+    const harmless = this.dead || this.cutscene || this.transition || this.now < this.harmlessUntil || HARMLESS.has(this.pose);
+    return harmless ? 0 : P.contactDamage;
+  }
 
   applyDamage(amount) { return this.health.apply(amount, (dealt) => this.game.showDamage(this.x, this.z, dealt)); }
 
@@ -215,6 +223,7 @@ export class Likho {
   // ---------------------------------------------------------------- Переход: рёв и проклятие
 
   *roar() {
+    this.transition = true;
     this.health.invulnerable = true;
     this.clawsOff();
     this.pose = 'Roar';
@@ -222,6 +231,8 @@ export class Likho {
     this.game.shake(0.45, 2.2);
     yield* this.wait(2.6, false);
     this.game.announce('Проклятие несчастья!');
+    this.transition = false;
+    this.harmlessUntil = this.now + 1;
   }
 
   /** Неудачи проклятия: «скользкие руки» («!» над головой) или «сук» (растущая тень). На пробной — только сучья. */
@@ -335,6 +346,7 @@ export class Likho {
   // ---------------------------------------------------------------- Добивание
 
   *exhaustedAndFinisher() {
+    this.transition = true;
     this.clawsOff();
     this.health.invulnerable = true;
     this.pose = 'Exhausted';
@@ -364,6 +376,9 @@ export class Likho {
 
     this.cutscene = false;
     this.pose = 'Blind';
+    // Богатырь стоит вплотную после сценки — даём отойти, прежде чем тело снова ранит.
+    this.transition = false;
+    this.harmlessUntil = this.now + 1.5;
   }
 
   /** Игрок нажал E над обессилевшим Лихом. */

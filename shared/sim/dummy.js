@@ -42,7 +42,9 @@ export class Dummy {
 
   snapshot() {
     return { kind: this.kind, name: this.name, x: this.x, z: this.z, fx: this.fx, fz: this.fz,
-      hp: Math.round(this.health.hp), max: Math.round(this.health.max), phase: this.phase };
+      hp: Math.round(this.health.hp), max: Math.round(this.health.max), phase: this.phase,
+      // На пробной сложности второй стадии нет — и деления на полосе тоже.
+      phaseMarks: this.d.trimmed ? [] : [0.5] };
   }
 
   update() {

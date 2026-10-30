@@ -141,7 +141,16 @@ export class Hud {
     $('boss').hidden = !boss || onMap;
     if (boss) {
       $('boss-name').textContent = boss.name;
-      $('boss-hp').style.width = `${Math.max(0, boss.hp / boss.max) * 100}%`;
+      const fraction = Math.max(0, boss.hp / boss.max);
+      $('boss-hp').style.width = `${fraction * 100}%`;
+      // Деления полосы — границы фаз; пройденные тускнеют.
+      const marks = boss.phaseMarks ?? [];
+      const key = `${boss.kind}:${marks.join(',')}`;
+      if (this.marksKey !== key) {
+        this.marksKey = key;
+        $('boss-marks').innerHTML = marks.map((m) => `<i class="boss-mark" style="left:${m * 100}%"></i>`).join('');
+      }
+      marks.forEach((m, i) => $('boss-marks').children[i]?.classList.toggle('passed', fraction <= m + 0.001));
       const names = PHASES[boss.kind];
       $('boss-phase').textContent = names ? `Фаза ${boss.phase}: ${names[boss.phase - 1] ?? ''}` : boss.phase > 1 ? 'Злится!' : '';
     }
