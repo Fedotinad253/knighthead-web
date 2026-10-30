@@ -24,6 +24,8 @@ const P = {
 const HARMLESS = new Set(['Hidden', 'Peek', 'HiddenTree', 'PeekTree', 'Exhausted', 'Finisher', 'Dead']);
 
 const rand = (a, b) => a + Math.random() * (b - a);
+/** Наименьшее расстояние между центрами капканов (радиус 0.8): между кольцами остаётся проход. */
+const TRAP_GAP = 2.2;
 const rotate = (x, z, degrees) => {
   // Поворот вокруг вертикали как Quaternion.Euler(0, degrees, 0) в Unity (по часовой, если смотреть сверху).
   const a = degrees * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
@@ -329,18 +331,32 @@ export class Likho {
   *placeTraps() {
     this.pose = 'Rise';
     const count = this.d.extra ? 3 : 2;
+    // Капканы не ставятся друг на друга: ни на только что выбранные места, ни на те, что уже лежат.
+    const taken = this.game.hazards.filter((h) => h.kind === 'trap').map((h) => [h.x, h.z]);
     const spots = [];
     for (let i = 0; i < count; i++) {
-      const near = this.pickTarget();
-      const bx = near ? near.x : this.x, bz = near ? near.z : this.z;
-      const a = Math.random() * Math.PI * 2, d = rand(1.5, 3);
-      spots.push(this.clampToArena(bx + Math.sin(a) * d, bz + Math.cos(a) * d));
-      this.game.telegraphCircle(spots[i][0], spots[i][1], 0.8, 0.5, 'danger');
+      const spot = this.trapSpot([...taken, ...spots]);
+      if (!spot) continue;
+      spots.push(spot);
+      this.game.telegraphCircle(spot[0], spot[1], 0.8, 0.5, 'danger');
     }
     yield* this.wait(0.5, false);
     // Капкан: железное кольцо с зубьями, лежит 20 секунд или пока не наступят.
     for (const [x, z] of spots) this.game.spawnZone(x, z, 0.8, 'trap', 20, P.trapDamage, P.trapStun);
     yield* this.wait(0.4, false);
+  }
+
+  /** Место для капкана у случайного богатыря (1.5–3 м от него), не ближе TRAP_GAP к занятым местам. Null — некуда. */
+  trapSpot(taken) {
+    for (let attempt = 0; attempt < 24; attempt++) {
+      const near = this.pickTarget();
+      const bx = near ? near.x : this.x, bz = near ? near.z : this.z;
+      // Если рядом тесно, понемногу отходим дальше от богатыря.
+      const a = Math.random() * Math.PI * 2, d = rand(1.5, 3) + attempt * 0.1;
+      const [x, z] = this.clampToArena(bx + Math.sin(a) * d, bz + Math.cos(a) * d);
+      if (taken.every(([tx, tz]) => Math.hypot(tx - x, tz - z) >= TRAP_GAP)) return [x, z];
+    }
+    return null;
   }
 
   // ---------------------------------------------------------------- Добивание
