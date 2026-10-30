@@ -247,6 +247,7 @@ export class Game {
     this.stoneBoss = -1;
     this.mapInput.clear();
     this.fightResolved = false;
+    this.victory = null;
     this.wipeTimer = 0;
     this.hazards = [];
     this.projectiles = [];
@@ -282,10 +283,12 @@ export class Game {
     };
   }
 
-  /** Вызывает босс, когда его здоровье кончилось. */
-  bossDefeated() {
-    if (this.state !== SESSION.ARENA || this.fightResolved) return;
-    this.fightResolved = true;
+  /**
+   * Записать победу — в тот же миг, когда босс пал (даже если богатырь сразу сбежит с арены,
+   * пока босс ещё «испускает последний вздох»). Повторный вызов ничего не делает.
+   */
+  recordVictory() {
+    if (this.state !== SESSION.ARENA || this.victory) return;
     const boss = this.currentBoss, world = BOSSES[boss].world;
     const nextWasLocked = !this.isWorldUnlocked(world + 1);
     if (this.difficulty > this.results[boss]) this.results[boss] = this.difficulty;
@@ -293,8 +296,16 @@ export class Game {
     const [defeated, total] = this.worldProgress(world);
     this.log(`Победа над «${BOSSES[boss].name}» (${DIFFICULTIES[this.difficulty].name}). ${WORLDS[world].name}: ${defeated}/${total}`);
     const next = WORLDS[world + 1];
-    this.announce(nextWasLocked && next && this.isWorldUnlocked(world + 1)
-      ? `Победа! Открыт путь в ${next.name}` : `Победа над «${BOSSES[boss].name}»!`);
+    this.victory = nextWasLocked && next && this.isWorldUnlocked(world + 1)
+      ? `Победа! Открыт путь в ${next.name}` : `Победа над «${BOSSES[boss].name}»!`;
+  }
+
+  /** Бой окончен победой: объявление и через 4 секунды — к карте. */
+  bossDefeated() {
+    if (this.state !== SESSION.ARENA || this.fightResolved) return;
+    this.fightResolved = true;
+    this.recordVictory();
+    this.announce(this.victory);
     this.tasks.start((function* (game) { yield 4; game.goTo(SESSION.MAP); })(this));
   }
 

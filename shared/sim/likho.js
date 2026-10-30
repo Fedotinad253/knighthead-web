@@ -473,6 +473,8 @@ export class Likho {
     this.cutscene = false;
     this.pose = 'Dead';
     this.game.setCurse(false);
+    // Победа засчитывается сразу, а не после «последнего вздоха» — вдруг богатырь тут же сбежит.
+    this.game.recordVictory();
     this.game.announce('Лихо испускает последний вздох…');
     this.tasks.start((function* (self) { yield 3; self.game.bossDefeated(); })(this));
   }
