@@ -28,6 +28,7 @@ export class View {
     const dpr = Math.min(devicePixelRatio || 1, 2);
     this.canvas.width = Math.round(innerWidth * dpr);
     this.canvas.height = Math.round(innerHeight * dpr);
+    this.canvas.width = Math.max(1, this.canvas.width); this.canvas.height = Math.max(1, this.canvas.height);
     this.w = this.canvas.width; this.h = this.canvas.height;
     this.dpr = dpr;
   }
@@ -70,6 +71,8 @@ export class View {
   /** Экран → точка на земле. */
   unproject(px, py) {
     const s = this.s;
+    // Холст нулевого размера (вкладка скрыта) — курсор «в центре», без деления на ноль.
+    if (!(s > 0)) return [this.cx, this.cz];
     return [this.cx - this.shakeX + (px - this.w / 2) / s, this.cz - ((py - this.h / 2) / s - this.shakeY) / SIN];
   }
 

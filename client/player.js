@@ -298,6 +298,8 @@ export class LocalPlayer {
     if (game.input.parryPressed && this.now >= this.parryReadyAt && !this.stunned && !game.dialogueOpen) {
       this.parryUntil = this.now + P.parryWindow;
       this.parryReadyAt = this.parryUntil + P.parryCooldown;
+      // Парирование, как и перекат, прерывает текущую атаку в любой фазе.
+      this.cancelAttack();
     }
 
     const touching = [];
