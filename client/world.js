@@ -3,7 +3,8 @@
 import { WEAPONS, PLAYER_COLORS, WORLDS, BOSSES } from '../shared/data.js';
 import { SCENES } from '../shared/scenes.js';
 import { assets } from './assets.js';
-import { shade, SIN } from './view.js';
+import { shade, SIN, ORB_LIFT, ORB_RADIUS } from './view.js';
+import { bogatyrPose } from './rig.js';
 import { drawParryRing } from './vfx.js';
 import { keyName } from './input.js';
 
@@ -83,6 +84,19 @@ function drawHitboxes(game) {
   if (game.boss) view.groundEllipse(game.boss.x, game.boss.z, game.boss.radius, game.boss.radius, null, '#ffd94d', 0.05);
   const me = game.local;
   view.groundEllipse(me.x, me.z, 0.45, 0.45, null, '#5bff7a', 0.05);
+  // Хитбокс богатыря для снарядов — очертания рисунка в текущей позе.
+  const avatar = game.avatars.get(game.myId);
+  if (avatar) {
+    const ctx = view.ctx;
+    const [px, py] = view.project(avatar.x, avatar.z);
+    ctx.fillStyle = 'rgba(91,255,122,0.28)';
+    ctx.beginPath();
+    for (const quad of avatar.rig.hitboxCells(bogatyrPose(avatar))) {
+      quad.forEach(([x, y], i) => (i ? ctx.lineTo(px + x * view.s, py - y * view.s) : ctx.moveTo(px + x * view.s, py - y * view.s)));
+      ctx.closePath();
+    }
+    ctx.fill();
+  }
   for (const o of game.sceneData.obstacles) {
     if (o.type === 'circle') view.groundEllipse(o.x, o.z, o.r, o.r, null, 'rgba(120,200,255,0.7)', 0.04);
   }
@@ -268,11 +282,8 @@ function drawPlayer(game, p) {
   view.groundEllipse(p.x, p.z, 0.5, 0.5, 'rgba(0,0,0,0.3)');
   const rig = p.rig;
   p.animator.setWeaponIfChanged(p.dropped ? null : WEAPONS[p.weapon]);
-  // Перекат: кувырок вперёд вокруг середины тела с поджатием; вращение плавно разгоняется и тормозит.
-  const roll = p.anim?.roll ?? 0;
-  const eased = roll > 0 ? roll * roll * (3 - 2 * roll) : 0;
-  const base = rig.base(view, p.x, p.z, { flip: p.flip, lying: p.downed ? (p.flip ? -90 : 90) : 0,
-    spin: -360 * eased, spinCenter: 0.75, squash: roll > 0 ? 1 - 0.3 * Math.sin(roll * Math.PI) : 1 });
+  // Перекат: кувырок вперёд вокруг середины тела с поджатием (см. bogatyrPose).
+  const base = rig.base(view, p.x, p.z, bogatyrPose(p));
   const blink = p.anim?.blink > 0 && Math.floor(game.now * 5 * 2) % 2 === 1;
   const flash = game.now < (p.flashUntil ?? 0);
   rig.draw(ctx, base, {
@@ -358,8 +369,8 @@ function drawOrb(view, h, now) {
   const ctx = view.ctx;
   view.groundEllipse(h.x, h.z, 0.3, 0.3, 'rgba(0,0,0,0.3)');
   const [px, py] = view.project(h.x, h.z, 0);
-  const y = py - (h.y ?? 1.2) * view.s * 0.75;
-  const r = 0.32 * view.s * (1 + Math.sin(now * 20 + h.id) * 0.06);
+  const y = py - (h.y ?? 1.2) * view.s * ORB_LIFT;
+  const r = ORB_RADIUS * view.s * (1 + Math.sin(now * 20 + h.id) * 0.06);
   const color = h.parry ? [255, 89, 199] : [255, 140, 38];
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';

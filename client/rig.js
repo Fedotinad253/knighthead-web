@@ -21,6 +21,40 @@ const rot = (x, y, degrees) => {
   return [x * c - y * s, x * s + y * c];
 };
 
+const invert = (m) => {
+  const det = m[0] * m[3] - m[1] * m[2];
+  if (Math.abs(det) < 1e-12) return null;
+  const a = m[3] / det, b = -m[1] / det, c = -m[2] / det, d = m[0] / det;
+  return [a, b, c, d, -(a * m[4] + c * m[5]), -(b * m[4] + d * m[5])];
+};
+
+// ---------------------------------------------------------------- Маска непрозрачности (для хитбокса)
+// Картинка уменьшается до сетки ~48 клеток по длинной стороне; клетка «тело», если в ней есть непрозрачное.
+
+const MASK_CELLS = 48;
+const masks = new Map();
+function opaqueMask(image) {
+  let mask = masks.get(image.src);
+  if (mask || !image.naturalWidth) return mask ?? null;
+  const scale = MASK_CELLS / Math.max(image.naturalWidth, image.naturalHeight);
+  const w = Math.max(1, Math.round(image.naturalWidth * scale)), h = Math.max(1, Math.round(image.naturalHeight * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(image, 0, 0, w, h);
+  const data = ctx.getImageData(0, 0, w, h).data;
+  const cells = new Uint8Array(w * h);
+  let u0 = w, v0 = h, u1 = -1, v1 = -1;
+  for (let v = 0; v < h; v++) for (let u = 0; u < w; u++) {
+    if (data[(v * w + u) * 4 + 3] < 100) continue;
+    cells[v * w + u] = 1;
+    u0 = Math.min(u0, u); v0 = Math.min(v0, v); u1 = Math.max(u1, u); v1 = Math.max(v1, v);
+  }
+  mask = { w, h, cells, bounds: u1 < 0 ? null : [u0, v0, u1 + 1, v1 + 1] };
+  masks.set(image.src, mask);
+  return mask;
+}
+
 // ---------------------------------------------------------------- Силуэты для вспышки и затемнения
 
 const silhouettes = new Map();
@@ -67,10 +101,14 @@ export class Rig {
   }
 
   /** Матрица «пиксели скелета → экран» для персонажа, стоящего в (x, z). */
-  base(view, x, z, { flip = false, lying = 0, spin = 0, spinCenter = 0, squash = 1 } = {}) {
+  base(view, x, z, options = {}) {
     const [px, py] = view.project(x, z);
-    const S = view.s * this.k;
-    let m = [flip ? -S : S, 0, 0, -S, px, py];
+    return mul([view.s, 0, 0, -view.s, px, py], this.local(options));
+  }
+
+  /** Матрица «пиксели скелета → метры» от ног персонажа: X вправо по экрану, Y вверх (высота рисунка). */
+  local({ flip = false, lying = 0, spin = 0, spinCenter = 0, squash = 1 } = {}) {
+    let m = [flip ? -this.k : this.k, 0, 0, this.k, 0, 0];
     if (lying) m = mul(m, trs(0, 0, lying, 1, 1));
     // Кувырок: поворот вокруг середины тела (spinCenter — высота в метрах) и сжатие по высоте.
     if (spin || squash !== 1) {
@@ -78,6 +116,59 @@ export class Rig {
       m = mul(m, mul(trs(0, c * squash, spin, 1, squash), trs(0, -c, 0, 1, 1)));
     }
     return m;
+  }
+
+  /**
+   * Задевает ли круг рисунок персонажа — по настоящим очертаниям каждой детали в текущей позе
+   * (прозрачные края картинок не в счёт). dx — метры вправо от ног по экрану, height — высота, r — радиус круга.
+   */
+  hits(dx, height, r, options = {}, skip = ['weapon']) {
+    this.compute();
+    const base = this.local(options);
+    for (const n of this.order) {
+      if (!n.visible || skip.includes(n.name)) continue;
+      const image = assets.image(n.image);
+      const mask = image && opaqueMask(image);
+      if (!mask?.bounds) continue;
+      const m = mul(base, n.world), inv = invert(m);
+      if (!inv) continue;
+      const [lx, ly] = apply(inv, dx, height);
+      const [w, h] = n.size, [pu, pv] = n.pivot;
+      const scale = Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));
+      // Клетка маски в метрах и радиус в клетках.
+      const cellW = w / mask.w, cellH = h / mask.h;
+      const ru = r / (scale * cellW), rv = r / (scale * cellH);
+      const u = (lx + pu * w) / cellW, v = ((1 - pv) * h - ly) / cellH;
+      const [u0, v0, u1, v1] = mask.bounds;
+      if (u < u0 - ru || u > u1 + ru || v < v0 - rv || v > v1 + rv) continue;
+      for (let cv = Math.max(v0, Math.floor(v - rv)); cv < Math.min(v1, Math.ceil(v + rv)); cv++)
+        for (let cu = Math.max(u0, Math.floor(u - ru)); cu < Math.min(u1, Math.ceil(u + ru)); cu++) {
+          if (!mask.cells[cv * mask.w + cu]) continue;
+          // Ближайшая точка клетки к центру круга.
+          const nu = Math.min(Math.max(u, cu), cu + 1), nv = Math.min(Math.max(v, cv), cv + 1);
+          if (((nu - u) / ru) ** 2 + ((nv - v) / rv) ** 2 <= 1) return true;
+        }
+    }
+    return false;
+  }
+
+  /** Очертания хитбокса для отладки: по детали — список клеток маски в метрах (углы четырёхугольников). */
+  hitboxCells(options = {}, skip = ['weapon']) {
+    this.compute();
+    const base = this.local(options), out = [];
+    for (const n of this.order) {
+      if (!n.visible || skip.includes(n.name)) continue;
+      const image = assets.image(n.image);
+      const mask = image && opaqueMask(image);
+      if (!mask?.bounds) continue;
+      const m = mul(base, n.world);
+      const [w, h] = n.size, [pu, pv] = n.pivot;
+      const cellW = w / mask.w, cellH = h / mask.h;
+      const at = (cu, cv) => apply(m, cu * cellW - pu * w, (1 - pv) * h - cv * cellH);
+      for (let cv = 0; cv < mask.h; cv++) for (let cu = 0; cu < mask.w; cu++)
+        if (mask.cells[cv * mask.w + cu]) out.push([at(cu, cv), at(cu + 1, cv), at(cu + 1, cv + 1), at(cu, cv + 1)]);
+    }
+    return out;
   }
 
   /** Где на экране точка кости (например, глаз — для свечения). */
@@ -142,6 +233,14 @@ export function createBogatyr() {
     pos: [(BOGATYR_FIST[0] - arm[1][0]) * arm[5][0], (BOGATYR_FIST[1] - arm[1][1]) * arm[5][1]], z: -0.006 });
   nodes.push({ name: 'weapon', parent: 'hand', pos: [0, 0], z: 0, image: null, pivot: [0.5, 0.5], size: [1, 1] });
   return new Rig(nodes, BOGATYR_HEIGHT / H);
+}
+
+/** Как сейчас стоит богатырь (для рисования и хитбокса): отражение, лёжа, кувырок переката. */
+export function bogatyrPose(p) {
+  const roll = p.anim?.roll ?? 0;
+  const eased = roll > 0 ? roll * roll * (3 - 2 * roll) : 0;
+  return { flip: p.flip, lying: p.downed ? (p.flip ? -90 : 90) : 0,
+    spin: -360 * eased, spinCenter: 0.75, squash: roll > 0 ? 1 - 0.3 * Math.sin(roll * Math.PI) : 1 };
 }
 
 /** Анимация богатыря: шаг (поочерёдный подъём ног, как у персонажа анфас), руки, плащ, взмах при атаке. */

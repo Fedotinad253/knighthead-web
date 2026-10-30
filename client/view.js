@@ -4,6 +4,9 @@
 export const PITCH = 55 * Math.PI / 180;
 export const SIN = Math.sin(PITCH);
 export const COS = Math.cos(PITCH);
+/** Снаряд врага рисуется на высоте y × ORB_LIFT метров рисунка и с радиусом ORB_RADIUS — по ним же считается попадание. */
+export const ORB_LIFT = 0.75;
+export const ORB_RADIUS = 0.32;
 /** Насколько близко камера: меньше — ближе. */
 const CLOSENESS = 0.8;
 
@@ -221,6 +224,8 @@ class OffscreenCanvasShim {
 
 /** Плавное приближение к цели с сохранением скорости (критическое затухание). */
 function smoothDamp(current, target, velocity, time, dt) {
+  if (!Number.isFinite(current) || !Number.isFinite(velocity)) return [target, 0];
+  if (!(dt > 0)) return [current, velocity];
   const omega = 2 / Math.max(0.0001, time);
   const x = omega * dt;
   const exp = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);

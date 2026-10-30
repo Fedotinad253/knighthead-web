@@ -3,6 +3,11 @@
 import { WEAPONS, PLAYER as P, ATTACK, attackStep, stepDuration, CARDS } from '../shared/data.js';
 import { resolveCollisions, nearestInteractable } from '../shared/scenes.js';
 import { playSound, blip } from './assets.js';
+import { bogatyrPose } from './rig.js';
+import { ORB_LIFT, ORB_RADIUS } from './view.js';
+
+/** Толщина богатыря по глубине: снаряд, пролетевший дальше этого перед ним или за ним, не задевает. */
+const BODY_DEPTH = 0.45;
 
 const rotateY = (x, z, degrees) => {
   const a = degrees * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
@@ -299,7 +304,7 @@ export class LocalPlayer {
     for (const h of game.liveHazards()) {
       const key = h.key ?? String(h.id);
       if (this.processed.has(key)) continue;
-      if (Math.hypot(h.x - this.x, h.z - this.z) < h.r + P.hurtRadius) touching.push({ ...h, key });
+      if (this.touches(h)) touching.push({ ...h, key });
     }
     // Сначала парирование: успешное защищает и от обычного снаряда, задевшего в тот же момент.
     if (this.parrying) {
@@ -327,6 +332,18 @@ export class LocalPlayer {
       if (h.stun > 0) this.stun(h.stun);
       if (h.type === 'proj') game.removeHazardLocally(h.id);
     }
+  }
+
+  /**
+   * Задевает ли опасность богатыря. Снаряды в воздухе — по очертаниям всей модельки (голова, руки, ноги,
+   * плащ) в текущей позе, на той высоте, где снаряд нарисован. Удары по земле и тело босса — по кругу у ног.
+   */
+  touches(h) {
+    if (h.type !== 'proj') return Math.hypot(h.x - this.x, h.z - this.z) < h.r + P.hurtRadius;
+    if (Math.abs(h.z - this.z) > BODY_DEPTH) return false;
+    const avatar = this.game.avatars.get(this.me?.id);
+    if (!avatar) return Math.hypot(h.x - this.x, h.z - this.z) < h.r + P.hurtRadius;
+    return avatar.rig.hits(h.x - this.x, (h.y ?? 1.2) * ORB_LIFT, ORB_RADIUS * 0.85, bogatyrPose(avatar));
   }
 
   forgetOldHazards() {
