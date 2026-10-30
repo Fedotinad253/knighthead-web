@@ -116,6 +116,11 @@ class Game {
       case 'parryFlash': this.vfx.parryFlash(m.x, m.z); playSound('parry', 0.6); break;
       case 'hurtFlash': { const a = this.avatars.get(m.id); if (a) a.flashUntil = this.now + 0.12; break; }
       case 'fx': if (m.fx === 'slash') this.vfx.slash(m.x, m.z, m.dx, m.dz, m.range, m.arc, m.color); break;
+      case 'abilityFx':
+        if (m.kind === 'sickle') this.vfx.slash(m.x, m.z, m.tx - m.x, m.tz - m.z, Math.hypot(m.tx - m.x, m.tz - m.z) + 1, 120, 'rgba(220,235,200,0.7)');
+        else this.vfx.toss(m.kind, m.x, m.z, m.tx, m.tz, m.flight);
+        break;
+      case 'result': this.hud.showResult(m); break;
     }
   }
 
@@ -292,8 +297,6 @@ class Game {
     const session = this.session, input = this.input;
     this.mapView.update(dt, session.hut);
     if (session.stoneOpen) {
-      for (const [code, d] of [['Digit1', 0], ['Digit2', 1], ['Digit3', 2], ['Numpad1', 0], ['Numpad2', 1], ['Numpad3', 2]])
-        if (input.keyPressed(code)) this.send({ t: 'difficulty', d });
       if (input.backPressed) this.send({ t: 'closeStone' });
       return;
     }

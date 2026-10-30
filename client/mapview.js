@@ -1,7 +1,7 @@
 // Карта на столе в таверне (минималистичная, как в Cuphead): три мира слева направо, река Смородина
 // с Калиновым мостом, золотая лестница в Правь, логова боссов. По ней свободно бегает избушка на курьих ножках.
 import { MAP } from '../shared/scenes.js';
-import { BOSSES, DIFFICULTIES } from '../shared/data.js';
+import { BOSSES, DIFFICULTIES, RANKS, RANK_S_PLUS } from '../shared/data.js';
 import { shade } from './view.js';
 
 export class MapView {
@@ -83,8 +83,11 @@ export class MapView {
       if (i === 0) { view.label(x, z, 2.2, 'Распутье', '#fff', 0.45); return; }
       const boss = BOSSES[i - 1];
       if (!unlocked(boss.world)) { view.label(x, z, 2.2, '???', '#8c8080', 0.45); return; }
-      const best = results[i - 1];
-      view.label(x, z, 2.2, best >= 0 ? `${boss.name}\n✓ ${DIFFICULTIES[best].name}` : boss.name, best >= 0 ? '#ffd966' : '#fff', 0.45);
+      const best = results[i - 1], rank = session?.ranks?.[i - 1] ?? -1;
+      // Победа: лучшая сложность и рейтинг; за S+ — звёздочка.
+      const line = best >= 0 ? `\n✓ ${DIFFICULTIES[best].name}${rank >= 0 ? ` · ${RANKS[rank].name}` : ''}` : '';
+      view.label(x, z, 2.2, `${boss.name}${line}`, best >= 0 ? '#ffd966' : '#fff', 0.45);
+      if (rank === RANK_S_PLUS) view.label(x, z, 3.5, '★', '#ffcf3a', 0.9);
     });
     for (const b of MAP.barriers) if (!unlocked(b.world)) view.label(b.x, b.z, 3.2, b.text, b.color, 0.42);
 

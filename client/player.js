@@ -1,6 +1,6 @@
 // Свой богатырь: управление, атаки и защита считаются здесь, в браузере игрока (отзывчиво),
 // урон, карты и снаряды — на сервере. Перенесено из PlayerController, PlayerCombat, PlayerDefense, PlayerInteractor.
-import { WEAPONS, PLAYER as P, ATTACK, attackStep, stepDuration, CARDS } from '../shared/data.js';
+import { WEAPONS, PLAYER as P, ATTACK, ABILITIES, attackStep, stepDuration, CARDS } from '../shared/data.js';
 import { resolveCollisions, nearestInteractable } from '../shared/scenes.js';
 import { playSound, blip } from './assets.js';
 import { bogatyrPose } from './rig.js';
@@ -112,7 +112,7 @@ export class LocalPlayer {
     [this.x, this.z] = resolveCollisions(game.sceneData, nx, nz, P.radius, extra);
     this.speed = dt > 0 ? Math.hypot(this.x - ox, this.z - oz) / dt : 0;
 
-    if (!locked && !me.downed && !this.stunned) this.updateCombat(dt);
+    if (!locked && !me.downed && !this.stunned) { this.updateCombat(dt); this.updateAbility(); }
     if (!me.downed) this.updateDefense();
     this.updateInteract(dt, locked);
     this.forgetOldHazards();
@@ -193,7 +193,8 @@ export class LocalPlayer {
 
   tickAttack(dt) {
     const a = this.attack;
-    a.time += dt;
+    // Волчий клык: когда здоровья меньше половины, атаки на треть быстрее.
+    a.time += dt * (this.me?.charm === 'wolf' && this.me.hp < P.maxHealth / 2 ? 1.33 : 1);
     if (!a.hitDone && a.time >= a.step.windup) {
       a.hitDone = true;
       this.performHit();
@@ -290,6 +291,23 @@ export class LocalPlayer {
   }
 
   onCardsChanged() { this.pendingCards = 0; }
+
+  // ---------------------------------------------------------------- Бытовая магия
+
+  /** Готова ли способность (перезарядку считает логика боя; здесь — чтобы не слать лишнего). */
+  get abilityReady() { return !!this.me?.ability && (this.me.abilityCooldown ?? 0) <= 0 && this.now >= (this.abilitySentAt ?? 0) + 0.3; }
+
+  /** Q — бросить способность под курсор (серп срезает ближайший куст сам). */
+  updateAbility() {
+    if (!this.game.input.abilityPressed || this.rolling || !this.abilityReady) return;
+    const a = ABILITIES[this.me.ability];
+    const [mx, mz] = this.game.view.unproject(this.game.input.mouseX, this.game.input.mouseY);
+    this.abilitySentAt = this.now;
+    this.cancelAttack();
+    this.setFacing(mx - this.x, mz - this.z);
+    this.game.send({ t: 'ability', x: r2(mx), z: r2(mz) });
+    blip(a?.duration ? 'shot' : 'slash');
+  }
 
   // ---------------------------------------------------------------- Защита
 

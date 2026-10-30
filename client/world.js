@@ -23,7 +23,9 @@ export function drawWorld(game) {
 
   // На земле: подсказки атак, капканы, кольца игроков, тени.
   game.vfx.drawGround(view);
-  for (const h of game.liveHazards()) if (h.type === 'zone' && h.kind === 'trap') drawTrap(view, h);
+  const effects = game.latest?.effects ?? [];
+  for (const e of effects) drawEffect(view, e, game.now);
+  for (const h of game.liveHazards()) if (h.type === 'zone' && h.kind === 'trap' && trapVisible(game, h)) drawTrap(view, h);
   for (const p of game.players) {
     if (!p.visible) continue;
     if (p.anim?.parry > 0) drawParryRing(view, p.x, p.z, p.anim.parry);
@@ -56,9 +58,18 @@ export function drawWorld(game) {
   if (scene.id === 'forest') for (const l of lights) { l.x += Math.sin(game.now * 0.5 + l.z) * 1.2; l.z += Math.cos(game.now * 0.4 + l.x) * 0.8; }
   for (const p of game.players) if (p.visible) lights.push({ x: p.x, z: p.z, y: 1, radius: 3.2, intensity: 0.35 });
   if (game.boss?.eye) lights.push(game.boss.eye);
+  for (const e of effects) if (e.kind === 'coals') lights.push({ x: e.x, z: e.z, y: 0.6, radius: e.r + 2, intensity: 0.55, color: '255,140,50', flicker: true });
   view.lighting(scene.light.ambient, lights, scene.light.tint, game.now);
 
   if (game.boss?.eyeGlowAt) drawEyeGlow(view, game.boss);
+  // Куриный бог: сквозь камень с дыркой видно спрятавшееся Лихо.
+  const b = game.boss;
+  if (b?.kind === 'likho' && game.me?.charm === 'chicken' && HIDING.has(b.pose)) {
+    const pulse = 0.6 + Math.sin(game.now * 5) * 0.25;
+    view.groundEllipse(b.x, b.z, 0.85, 0.85, null, `rgba(255,220,90,${pulse})`, 0.05);
+    view.label(b.x, b.z, 1.9, '◉', `rgba(255,217,77,${pulse})`, 0.55);
+  }
+  if (game.session?.curses?.includes('cataract')) drawCataract(game);
 
   // Подписи и всплывающий текст — поверх света.
   if (scene.id === 'tavern') drawTavernLabels(game);
@@ -231,7 +242,24 @@ function addForestProps(game, add) {
     view.blob(t.x, t.z, t.crownY, t.crownW, t.crownH, t.crownW, t.hide ? '#1d3a1f' : '#1a301a', 0.95);
     view.ctx.globalAlpha = 1;
   });
-  for (const b of scene.bushes) add(b.z - 0.3, () => drawBush(view, b.x, b.z));
+  const cut = new Set(game.latest?.cut ?? []);
+  scene.bushes.forEach((b, i) => {
+    if (cut.has(i)) add(b.z + 0.2, () => drawStubble(view, b.x, b.z));
+    else add(b.z - 0.3, () => drawBush(view, b.x, b.z));
+  });
+}
+
+/** Что осталось от срезанного или сгоревшего куста. */
+function drawStubble(view, x, z) {
+  view.groundEllipse(x, z, 1.1, 0.9, 'rgba(25,20,12,0.55)');
+  const ctx = view.ctx;
+  ctx.strokeStyle = '#5a4a2a';
+  ctx.lineWidth = Math.max(1.5, view.s * 0.05);
+  for (let i = 0; i < 7; i++) {
+    const a = i * 2.4, r = 0.25 + (i % 3) * 0.2;
+    const [px, py] = view.project(x + Math.sin(a) * r, z + Math.cos(a) * r);
+    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + view.s * 0.03, py - view.s * 0.22); ctx.stroke();
+  }
 }
 
 /** Куст в рост сложившегося пополам Лиха (~1.7 м) — три шара листвы. */
@@ -389,6 +417,59 @@ function drawArrow(view, a) {
   ctx.strokeStyle = '#f2e6b3';
   ctx.lineWidth = Math.max(2, view.s * 0.06);
   ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+}
+
+/** Позы, в которых Лихо сидит в укрытии. */
+const HIDING = new Set(['Hidden', 'Peek', 'HiddenTree', 'PeekTree']);
+
+/** Проклятие «Невидимые капканы»: капкан видно только вплотную (или сквозь Куриного бога). */
+function trapVisible(game, h) {
+  if (!game.session?.curses?.includes('hiddenTraps') || game.me?.charm === 'chicken') return true;
+  return Math.hypot(h.x - game.local.x, h.z - game.local.z) < 2.6;
+}
+
+/** Следы бытовой магии: соляной круг, рассыпанный горох, горящие угли. Под конец тускнеют. */
+function drawEffect(view, e, now) {
+  const fade = Math.min(1, e.left / 0.8);
+  const ctx = view.ctx;
+  if (e.kind === 'salt') {
+    view.groundEllipse(e.x, e.z, e.r, e.r, `rgba(240,236,225,${0.12 * fade})`, `rgba(245,242,232,${0.9 * fade})`, 0.09);
+    for (let i = 0; i < 24; i++) {
+      const a = i * Math.PI * 2 / 24 + (i % 2) * 0.1, r = e.r * (0.92 + (i % 3) * 0.05);
+      const [px, py] = view.project(e.x + Math.sin(a) * r, e.z + Math.cos(a) * r);
+      ctx.fillStyle = `rgba(255,255,255,${0.85 * fade})`;
+      ctx.fillRect(px - view.s * 0.04, py - view.s * 0.02, view.s * 0.08, view.s * 0.05);
+    }
+  } else if (e.kind === 'peas') {
+    for (let i = 0; i < 40; i++) {
+      const a = i * 2.39996, r = e.r * Math.sqrt((i + 0.5) / 40);
+      const [px, py] = view.project(e.x + Math.sin(a) * r, e.z + Math.cos(a) * r);
+      ctx.fillStyle = `rgba(${i % 2 ? '190,205,95' : '160,180,70'},${fade})`;
+      ctx.beginPath(); ctx.arc(px, py, view.s * 0.06, 0, Math.PI * 2); ctx.fill();
+    }
+  } else if (e.kind === 'coals') {
+    const flicker = 0.8 + Math.sin(now * 13 + e.id) * 0.1 + Math.sin(now * 7.3) * 0.1;
+    view.groundEllipse(e.x, e.z, e.r, e.r, `rgba(255,90,20,${0.28 * fade * flicker})`, `rgba(255,150,60,${0.7 * fade})`, 0.05);
+    for (let i = 0; i < 14; i++) {
+      const a = i * 2.39996 + now * 0.3, r = e.r * Math.sqrt((i + 0.5) / 14) * 0.9;
+      const lift = ((now * 0.9 + i * 0.37) % 1) * 1.2;
+      const [px, py] = view.project(e.x + Math.sin(a) * r, e.z + Math.cos(a) * r, lift);
+      ctx.fillStyle = `rgba(255,${150 + (i % 3) * 30},60,${fade * (1 - lift / 1.2)})`;
+      ctx.fillRect(px - view.s * 0.03, py - view.s * 0.03, view.s * 0.06, view.s * 0.06);
+    }
+  }
+}
+
+/** Проклятие «Бельмо»: дальше нескольких шагов от богатыря — тьма. */
+function drawCataract(game) {
+  const { view } = game, ctx = view.ctx;
+  const [px, py] = view.project(game.local.x, game.local.z, 1);
+  const inner = view.s * 4.5, outer = view.s * 8.5;
+  const g = ctx.createRadialGradient(px, py, inner, px, py, outer);
+  g.addColorStop(0, 'rgba(6,6,10,0)');
+  g.addColorStop(1, 'rgba(6,6,10,0.93)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, view.w, view.h);
 }
 
 /** Капкан: тёмное железное кольцо с зубьями. */

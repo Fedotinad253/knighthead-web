@@ -16,6 +16,7 @@
       <div class="bar"><div id="me-hp" class="fill hp"></div></div>
       <div id="cards" class="cards"></div>
       <div class="row small"><span id="dash">Перекат</span><span id="parry">Парирование</span></div>
+      <div id="gear" class="small" hidden><div id="gear-ability"></div><div id="gear-charm" class="dim"></div></div>
     </div>
     <div id="mate" class="panel small" hidden>
       <div class="row"><span id="mate-name">Напарник</span></div>
@@ -25,6 +26,7 @@
       <div id="boss-name"></div>
       <div class="bar boss"><div id="boss-hp" class="fill"></div><div id="boss-marks"></div></div>
       <div id="boss-phase" class="small"></div>
+      <div id="boss-curses" class="small"></div>
     </div>
     <div id="worlds" class="panel" hidden></div>
     <div id="prompt" hidden></div>
@@ -35,8 +37,20 @@
     <div id="stone" hidden>
       <div id="stone-title"></div>
       <div id="stone-description" class="small"></div>
-      <div id="stone-lines"></div>
-      <button id="stone-close" class="button">Отойти (Esc)</button>
+      <div id="stone-difficulty" class="choice-row"></div>
+      <h3>Оружие</h3><div id="stone-weapons" class="choice-row"></div>
+      <h3>Бытовая магия <span class="dim small">(Q)</span></h3><div id="stone-abilities" class="choice-row"></div>
+      <h3>Оберег</h3><div id="stone-charms" class="choice-row"></div>
+      <h3>Проклятия <span class="dim small">— сколько угодно, за каждое очко прокачки</span></h3><div id="stone-curses" class="choice-row"></div>
+      <div id="stone-summary" class="small"></div>
+      <div class="row"><button id="stone-close" class="button">Отойти (Esc)</button><button id="stone-go" class="button big">В бой</button></div>
+    </div>
+    <div id="result" class="overlay" hidden>
+      <div id="result-title"></div>
+      <div id="result-rank"></div>
+      <table id="result-table"></table>
+      <div id="result-rewards"></div>
+      <div class="row"><span></span><button id="result-close" class="button">Дальше</button></div>
     </div>
     <div id="controls" class="overlay" hidden>
       <h2>Управление</h2>

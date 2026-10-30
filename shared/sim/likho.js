@@ -24,6 +24,11 @@ const P = {
   contactDamage: 10,
 };
 
+/** Позы, в которых Лихо открыто для ударов (для Медвежьего когтя). */
+const VULNERABLE = new Set(['Tired', 'Stunned', 'Exhausted']);
+/** Насколько медленнее Лихо на рассыпанном горохе. */
+const PEAS_SLOW = 0.45;
+
 /** Позы, в которых тело не ранит: спряталось, обессилело, мёртвое. */
 const HARMLESS = new Set(['Hidden', 'Peek', 'HiddenTree', 'PeekTree', 'Exhausted', 'Finisher', 'Dead']);
 
@@ -80,6 +85,9 @@ export class Likho {
   tele(s) { return s / Math.max(0.1, this.d.attackSpeed); }
   fast(v) { return v * Math.sqrt(Math.max(0.1, this.d.attackSpeed)); }
   window(s) { return s * (this.d.trimmed ? 1.3 : this.d.extra ? 0.7 : 1); }
+  /** Проклятие «Злое Лихо»: выпады и броски на половину дальше. */
+  get reach() { return this.game.curses.has('wicked') ? 1.5 : 1; }
+  get vulnerable() { return !this.dead && VULNERABLE.has(this.pose); }
 
   update() { this.tasks.update(); }
 
@@ -164,6 +172,7 @@ export class Likho {
     }
     if (flusher) { yield* this.flushedOut(flusher); return; }
 
+    this.hideSpot = null;
     const lunges = this.d.extra ? 2 : 1;
     for (let i = 0; i < lunges && !this.atFloor; i++) {
       target = this.pickTarget() ?? target;
@@ -180,15 +189,45 @@ export class Likho {
     }
   }
 
-  /** Ждать в укрытии; если богатырь подошёл ближе flushRadius — вернуть его. */
+  /**
+   * Ждать в укрытии; если богатырь подошёл ближе flushRadius — вернуть его.
+   * Укрытия не стало (куст срезан или сгорел, вокруг рассыпана соль) — тоже выскакивает.
+   */
   *watchFromHiding(seconds) {
     const end = this.now + seconds;
     while (this.now < end && !this.dead) {
       const nearest = this.pickNearest();
       if (nearest && Math.hypot(nearest.x - this.x, nearest.z - this.z) < P.flushRadius) return nearest;
+      const reason = this.exposed();
+      if (reason && nearest) {
+        this.game.floatText(this.x, this.z, 3, reason, '#ffe7a8', 1.3);
+        return nearest;
+      }
       yield;
     }
     return null;
+  }
+
+  /** Почему укрытие больше не прячет (текст над Лихом) или null. */
+  exposed() {
+    const spot = this.hideSpot;
+    if (!spot) return null;
+    if (!spot.behindTree && this.game.isBushCut(spot.x, spot.z)) return 'Негде спрятаться!';
+    if (this.game.effectAt('salt', this.x, this.z, 0.9)) return 'Соль жжёт!';
+    return null;
+  }
+
+  /** Куст срезали серпом или сожгли углями. Сидело в нём — получает урон (укрытие больше не спасает). */
+  onBushCut(bush, damage) {
+    const hiding = this.pose === 'Hidden' || this.pose === 'Peek';
+    if (!hiding || this.dead || Math.hypot(bush.x - this.x, bush.z - this.z) > 1.4) return;
+    this.health.invulnerable = false;
+    this.applyDamage(damage);
+  }
+
+  /** Бытовая магия богатыря легла на землю. Горох стучит — слепое Лихо слышит. */
+  onAbility(kind, x, z) {
+    if (kind === 'peas') this.hear(x, z);
   }
 
   /** Выкурили из укрытия: выскакивает со взмахом когтей, потом ненадолго открыто. */
@@ -205,7 +244,7 @@ export class Likho {
 
   *lunge(target) {
     const tx = target.x - this.x, tz = target.z - this.z;
-    const length = Math.min(Math.max(Math.hypot(tx, tz) + 2.5, 4), 24);
+    const length = Math.min(Math.max(Math.hypot(tx, tz) + 2.5, 4), 24) * this.reach;
     let [dx, dz] = Math.hypot(tx, tz) > 0.1 ? norm(tx, tz) : [this.fx, this.fz];
     this.face(dx, dz);
 
@@ -247,7 +286,8 @@ export class Likho {
   /** Неудачи проклятия: «скользкие руки» («!» над головой) или «сук» (растущая тень). На пробной — только сучья. */
   *misfortunes() {
     while (!this.dead) {
-      yield rand(...P.misfortuneInterval) / this.d.attackSpeed;
+      // «Кривая доля» — неудачи вдвое чаще.
+      yield rand(...P.misfortuneInterval) / this.d.attackSpeed / (this.game.curses.has('crooked') ? 2 : 1);
       if (this.dead || this.cutscene) continue;
       const player = this.pickTarget();
       if (!player) continue;
@@ -472,7 +512,7 @@ export class Likho {
       return;
     }
 
-    yield* this.runCharge(dx, dz, 18, this.fast(P.chargeSpeed));
+    yield* this.runCharge(dx, dz, 18 * this.reach, this.fast(P.chargeSpeed));
   }
 
   /** Замирает и прислушивается (подсказка), затем быстро бежит туда, где был звук. */
@@ -481,7 +521,7 @@ export class Likho {
     if (!dx && !dz) [dx, dz] = [this.fx, this.fz];
     this.face(dx, dz);
     this.pose = 'Listen';
-    const length = Math.min(18, Math.hypot(x - this.x, z - this.z) + 2.5);
+    const length = Math.min(18, Math.hypot(x - this.x, z - this.z) + 2.5) * this.reach;
     this.game.telegraphLine(this.x, this.z, dx, dz, length, 1.6, this.tele(P.listenTime));
     yield* this.wait(this.tele(P.listenTime), false);
     yield* this.runCharge(dx, dz, length, this.fast(P.chargeSpeed) * P.rushSpeedup);
@@ -572,7 +612,10 @@ export class Likho {
    */
   cast(dx, dz, distance) {
     let best = null;
-    for (const o of this.scene.obstacles) {
+    // Соляной круг нечисть не переступает — для неё он как ствол (но не оглушает).
+    const salt = this.game.effects.filter((e) => e.kind === 'salt')
+      .map((e) => ({ type: 'circle', x: e.x, z: e.z, r: e.r - P.bodyRadius * 0.5, salt: true }));
+    for (const o of salt.length ? [...this.scene.obstacles, ...salt] : this.scene.obstacles) {
       if (o.type !== 'circle') continue;
       const R = o.r + P.bodyRadius;
       const ox = this.x - o.x, oz = this.z - o.z;
@@ -590,6 +633,7 @@ export class Likho {
   /** Шаг с проверкой деревьев. slide — обходить сбоку. Возвращает препятствие, если упёрлось. */
   step(dx, dz, distance, slide) {
     if (distance <= 0 || (!dx && !dz)) return null;
+    if (this.game.effectAt('peas', this.x, this.z)) distance *= PEAS_SLOW;
     const hit = this.cast(dx, dz, distance + 0.05);
     if (!hit) { this.moveBy(dx * distance, dz * distance); return null; }
     if (slide) {
@@ -621,9 +665,13 @@ export class Likho {
 
   /** Укрытие: не одно из трёх последних и не то, где стоит сейчас; по возможности на дистанции выпада (5–13 м). */
   pickHidePoint(target) {
+    this.hideSpot = null;
     const preferred = [], allowed = [];
     for (const point of this.scene.hidePoints) {
       if (this.recentHides.includes(point) || Math.hypot(point.x - this.x, point.z - this.z) < 2) continue;
+      // Срезанный куст и укрытие в соли не годятся.
+      if (!point.behindTree && this.game.isBushCut(point.x, point.z)) continue;
+      if (this.game.effectAt('salt', point.x, point.z, 0.5)) continue;
       allowed.push(point);
       const d = Math.hypot(point.x - target.x, point.z - target.z);
       if (d >= 5 && d <= 13) preferred.push(point);
@@ -634,6 +682,7 @@ export class Likho {
     this.recentHides.push(pick);
     while (this.recentHides.length > 3) this.recentHides.shift();
     this.behindTree = pick.behindTree;
+    this.hideSpot = pick;
     if (!pick.behindTree) return this.clampToArena(pick.x, pick.z);
     // За стволом — с дальней от камеры стороны (камера смотрит на север), чуть в сторону от богатыря.
     const side = Math.min(Math.max(pick.x - target.x, -1), 1) * 0.12;

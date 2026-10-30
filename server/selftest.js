@@ -1,5 +1,5 @@
 // Проверка без людей: сервер + два бота по настоящему WebSocket проходят бой с боссом до победы.
-//   node server/selftest.js [--boss 0] [--difficulty 1]
+//   node server/selftest.js [--boss 0] [--difficulty 0]
 // Боты бегают по арене и шлют позицию; урон боссу и добивание — как с флагами --debugwin --godmode.
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';

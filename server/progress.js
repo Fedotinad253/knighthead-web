@@ -1,17 +1,13 @@
-// Прогресс (побеждённые боссы) хранится у того, кто запустил сервер, — как у хоста в Cuphead.
-// Для каждого босса — лучшая сложность победы, -1 — не побеждён.
+// Прогресс хранится у того, кто запустил сервер, — как у хоста в Cuphead. Состав — в shared/progress.js.
 import { readFileSync, writeFileSync } from 'node:fs';
+import { normalizeProgress } from '../shared/progress.js';
 
 export function loadProgress(file, count) {
-  const results = Array(count).fill(-1);
-  try {
-    const saved = JSON.parse(readFileSync(file, 'utf8')).bossResults ?? [];
-    saved.slice(0, count).forEach((r, i) => { results[i] = Number.isInteger(r) ? r : -1; });
-  } catch { /* сохранения ещё нет */ }
-  return results;
+  try { return normalizeProgress(JSON.parse(readFileSync(file, 'utf8')), count); }
+  catch { return normalizeProgress(null, count); } // сохранения ещё нет
 }
 
-export function saveProgress(file, results) {
-  try { writeFileSync(file, JSON.stringify({ bossResults: results }, null, 2)); }
+export function saveProgress(file, progress) {
+  try { writeFileSync(file, JSON.stringify(progress, null, 2)); }
   catch (error) { console.warn(`[KnightHead] Не удалось сохранить прогресс: ${error.message}`); }
 }

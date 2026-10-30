@@ -73,37 +73,97 @@ export const WORLDS = [
   { name: 'Правь', color: '#80ccff', ground: '#c7b880' },
 ];
 
-/** Боссы. Порядок — индексы на карте и в сохранении. kind: 'likho' или 'dummy' (Чучело-заглушка). */
+/**
+ * Боссы. Порядок — индексы на карте и в сохранении. kind: 'likho' или 'dummy' (Чучело-заглушка).
+ * par — за сколько секунд бой считается быстрым (для рейтинга). pools — из чего выпадает снаряжение перед боем:
+ * под каждого босса только то, что в этом бою полезно (у Лиха — только ближний бой).
+ */
+const DUMMY_POOLS = { weapons: [0, 1, 2, 3, 4], abilities: ['peas', 'coals'], charms: ['belt', 'wolf'], curses: ['cataract'] };
 export const BOSSES = [
-  { name: 'Лихо Одноглазое', world: 0, description: 'Хитрое и скрытное. Нападает из кустов', kind: 'likho', arena: 'forest' },
-  { name: 'Соловей-Разбойник', world: 0, description: '', kind: 'dummy', arena: 'arena' },
-  { name: 'Змей Горыныч', world: 0, description: 'Страж Калинова моста', kind: 'dummy', arena: 'arena' },
-  { name: 'Водяной', world: 1, description: '', kind: 'dummy', arena: 'arena' },
-  { name: 'Вий', world: 1, description: '', kind: 'dummy', arena: 'arena' },
-  { name: 'Кощей Бессмертный', world: 1, description: 'Хозяин Нави', kind: 'dummy', arena: 'arena' },
-  { name: 'Перун', world: 2, description: '', kind: 'dummy', arena: 'arena' },
-  { name: 'Морена', world: 2, description: '', kind: 'dummy', arena: 'arena' },
-  { name: 'Чернобог', world: 2, description: '', kind: 'dummy', arena: 'arena' },
+  { name: 'Лихо Одноглазое', world: 0, description: 'Хитрое и скрытное. Нападает из кустов', kind: 'likho', arena: 'forest', par: 150,
+    pools: { weapons: [0, 1, 2], abilities: ['salt', 'peas', 'sickle', 'coals'], charms: ['chicken', 'belt', 'bear', 'wolf'],
+      curses: ['cataract', 'wicked', 'crooked', 'hiddenTraps'] } },
+  { name: 'Соловей-Разбойник', world: 0, description: '', kind: 'dummy', arena: 'arena', par: 60, pools: DUMMY_POOLS },
+  { name: 'Змей Горыныч', world: 0, description: 'Страж Калинова моста', kind: 'dummy', arena: 'arena', par: 60, pools: DUMMY_POOLS },
+  { name: 'Водяной', world: 1, description: '', kind: 'dummy', arena: 'arena', par: 60, pools: DUMMY_POOLS },
+  { name: 'Вий', world: 1, description: '', kind: 'dummy', arena: 'arena', par: 60, pools: DUMMY_POOLS },
+  { name: 'Кощей Бессмертный', world: 1, description: 'Хозяин Нави', kind: 'dummy', arena: 'arena', par: 60, pools: DUMMY_POOLS },
+  { name: 'Перун', world: 2, description: '', kind: 'dummy', arena: 'arena', par: 60, pools: DUMMY_POOLS },
+  { name: 'Морена', world: 2, description: '', kind: 'dummy', arena: 'arena', par: 60, pools: DUMMY_POOLS },
+  { name: 'Чернобог', world: 2, description: '', kind: 'dummy', arena: 'arena', par: 60, pools: DUMMY_POOLS },
 ];
 
-/** Сложности — камень на распутье перед каждым боем. */
+/** Сложности: на средней босс такой, как задуман; на тяжёлой — новые атаки и всё быстрее. Только на тяжёлой бывает S+. */
 export const DIFFICULTIES = [
   {
-    name: 'Пробная', stone: 'Налево пойдёшь — жив будешь',
-    description: 'Атаки медленнее, у боссов меньше стадий. Чтобы освоиться с боем.',
-    attackSpeed: 0.7, projectileSpeed: 0.75, bossHealth: 0.75, trimmed: true, extra: false,
-  },
-  {
-    name: 'Богатырская', stone: 'Направо пойдёшь — коня потеряешь',
-    description: 'Обычный бой: так, как боссы задуманы.',
+    name: 'Средняя', description: 'Босс такой, как задуман.',
     attackSpeed: 1, projectileSpeed: 1, bossHealth: 1, trimmed: false, extra: false,
   },
   {
-    name: 'Былинная', stone: 'Прямо пойдёшь — смерть найдёшь',
-    description: 'Новые атаки, всё быстрее и злее. Для тех, кто уже знает босса.',
+    name: 'Тяжёлая', description: 'Новые атаки, всё быстрее и злее. Только здесь можно взять S+.',
     attackSpeed: 1.3, projectileSpeed: 1.2, bossHealth: 1.15, trimmed: false, extra: true,
   },
 ];
+
+/**
+ * Бытовая магия (кнопка Q). Бросок — в точку под курсором (не дальше range). cooldown — секунды.
+ */
+export const ABILITIES = {
+  salt: { name: 'Соль', cooldown: 10, range: 9, radius: 1.8, duration: 6,
+    description: 'Соляной круг: нечисть его не переступает. Брошенная в укрытие — выгоняет Лихо оттуда.' },
+  peas: { name: 'Горсть гороха', cooldown: 8, range: 10, radius: 2, duration: 8,
+    description: 'Рассыпанный горох: враг на нём еле ползёт. Слепое Лихо бежит на стук горошин.' },
+  sickle: { name: 'Серп', cooldown: 6, range: 3.2, radius: 1.4, duration: 0, damage: 25,
+    description: 'Срезает ближайший куст до конца боя — Лиху негде прятаться. Сидело в нём — получит по лапам.' },
+  coals: { name: 'Горшок с углями', cooldown: 12, range: 9, radius: 1.9, duration: 5, damage: 18,
+    description: 'Горящие угли жгут врага, а куст в огне сгорает — вместе с тем, кто в нём прятался.' },
+};
+
+/** Обереги — пассивные свойства на весь бой. */
+export const CHARMS = {
+  chicken: { name: 'Куриный бог', description: 'Камень с дыркой: сквозь него видно спрятавшееся Лихо и любые капканы.' },
+  belt: { name: 'Пояс с наузами', description: 'Раз за бой смертельный удар рвёт пояс, а богатырь остаётся жив.' },
+  bear: { name: 'Медвежий коготь', description: 'Удары по уставшему, оглушённому или обессилевшему врагу — в полтора раза сильнее.' },
+  wolf: { name: 'Волчий клык', description: 'Когда здоровья меньше половины, атаки на треть быстрее.' },
+};
+
+/** Проклятия — по желанию, от нуля до трёх. Каждое делает бой труднее и даёт очко прокачки (смотри RANKS). */
+export const CURSES = {
+  cataract: { name: 'Бельмо', description: 'Богатырь плохо видит: всё, что дальше нескольких шагов, тонет во тьме.' },
+  wicked: { name: 'Злое Лихо', description: 'Выпады и броски Лиха на половину дальше.' },
+  crooked: { name: 'Кривая доля', description: 'Проклятие несчастья бьёт вдвое чаще.' },
+  hiddenTraps: { name: 'Невидимые капканы', description: 'Капканы видно, только когда подошёл к ним вплотную.' },
+};
+
+/**
+ * Рейтинг боя (от худшего): очки прокачки за рейтинг и сколько взятых проклятий засчитывается.
+ * S+ — только на тяжёлой сложности, даёт звёздочку на карте. coins — монеты от трактирщика за победу.
+ */
+export const RANKS = [
+  { name: 'D', min: 0, points: 1, curses: 1, coins: 5, color: '#a89a8a' },
+  { name: 'C', min: 40, points: 2, curses: 2, coins: 8, color: '#8fc27a' },
+  { name: 'B', min: 55, points: 3, curses: 2, coins: 12, color: '#6fb0ff' },
+  { name: 'A', min: 70, points: 4, curses: 3, coins: 16, color: '#c48cff' },
+  { name: 'S', min: 85, points: 6, curses: 3, coins: 20, color: '#ffd966' },
+  { name: 'S+', min: 85, points: 6, curses: 3, coins: 25, color: '#ff9a3c' },
+];
+export const RANK_S_PLUS = 5;
+
+/**
+ * Оценка боя 0–100: время (40), полученный урон (40), парирования (20), и тяжёлая сложность добавляет 10.
+ * S+ — тяжёлая сложность и S без этой добавки.
+ */
+export function rateFight({ time, par, damageTaken, parries, difficulty }) {
+  const timeScore = 40 * Math.min(1, Math.max(0, (par * 2.5 - time) / (par * 1.5)));
+  const damageScore = 40 * Math.max(0, 1 - damageTaken / PLAYER.maxHealth);
+  const parryScore = 20 * Math.min(1, parries / 5);
+  const base = timeScore + damageScore + parryScore;
+  const score = Math.min(100, base + (difficulty >= 1 ? 10 : 0));
+  let rank = 0;
+  for (let i = 0; i < RANK_S_PLUS; i++) if (score >= RANKS[i].min) rank = i;
+  if (difficulty >= 1 && base >= RANKS[4].min) rank = RANK_S_PLUS;
+  return { rank, score: Math.round(score), parts: { time: Math.round(timeScore), damage: Math.round(damageScore), parries: Math.round(parryScore) } };
+}
 
 /**
  * Богатырь: движение как в Enter the Gungeon, перекат без выносливости, парирование на V.

@@ -1,6 +1,6 @@
 // Интерфейс поверх игры (HTML): здоровье и карты, напарник, полоса босса, объявления, подсказка «E»,
-// диалог с NPC, камень на распутье (выбор сложности), прогресс миров на карте, подсказка управления.
-import { WEAPONS, BOSSES, DIFFICULTIES, WORLDS, CARDS, PLAYER, SESSION } from '../shared/data.js';
+// диалог с NPC, камень на распутье (сложность и снаряжение перед боем), итоги боя, прогресс миров на карте, подсказка управления.
+import { WEAPONS, BOSSES, DIFFICULTIES, WORLDS, CARDS, PLAYER, SESSION, ABILITIES, CHARMS, CURSES, RANKS } from '../shared/data.js';
 import { MAP, nodeNear } from '../shared/scenes.js';
 import { ACTIONS, keyName } from './input.js';
 import { getVolume, setVolume, unlockAudio, blip } from './assets.js';
@@ -17,6 +17,11 @@ export class Hud {
     this.stoneKey = '';
     $('cards').innerHTML = Array.from({ length: CARDS.max }, () => '<div class="card"><i></i></div>').join('');
     $('stone-close').onclick = () => game.send({ t: 'closeStone' });
+    $('stone-go').onclick = () => {
+      const p = this.pick;
+      if (p) game.send({ t: 'startFight', d: p.d, weapon: p.weapon, ability: p.ability, charm: p.charm, curses: [...p.curses] });
+    };
+    $('result-close').onclick = () => { $('result').hidden = true; };
     $('controls-close').onclick = () => this.toggle('controls', false);
     $('controls-reset').onclick = () => { game.input.reset(); this.renderControls(); };
     $('menu-controls').onclick = () => this.toggle('controls', true);
@@ -56,7 +61,7 @@ export class Hud {
   setupDebug() {
     const game = this.game;
     $('dbg-boss').innerHTML = BOSSES.map((b, i) => `<option value="${i}">${b.name}</option>`).join('');
-    $('dbg-difficulty').innerHTML = DIFFICULTIES.map((d, i) => `<option value="${i}"${i === 1 ? ' selected' : ''}>${d.name}</option>`).join('');
+    $('dbg-difficulty').innerHTML = DIFFICULTIES.map((d, i) => `<option value="${i}"${i === 0 ? ' selected' : ''}>${d.name}</option>`).join('');
     $('dbg-fight').onclick = () => game.send({ t: 'debug', cmd: 'fight', boss: Number($('dbg-boss').value), d: Number($('dbg-difficulty').value) });
     $('dbg-god').onchange = (e) => game.send({ t: 'debug', cmd: 'godmode', on: e.target.checked });
     $('dbg-auto').onchange = (e) => game.send({ t: 'debug', cmd: 'debugwin', on: e.target.checked });
@@ -92,6 +97,31 @@ export class Hud {
 
   get dialogueOpen() { return !$('dialogue').hidden; }
 
+  /** Итоги боя: рейтинг, из чего он сложился, очки прокачки и монеты. */
+  showResult(m) {
+    const rank = RANKS[m.rank];
+    const minutes = Math.floor(m.time / 60), seconds = String(m.time % 60).padStart(2, '0');
+    $('result-title').textContent = `Победа: ${BOSSES[m.boss].name}`;
+    $('result-rank').textContent = rank.name;
+    $('result-rank').style.color = rank.color;
+    const rows = [
+      ['Время', `${minutes}:${seconds}`, m.parts.time, 40],
+      ['Получено урона', m.damageTaken, m.parts.damage, 40],
+      ['Парирования', m.parries, m.parts.parries, 20],
+      ['Сложность', DIFFICULTIES[m.difficulty].name, m.difficulty >= 1 ? 10 : 0, 10],
+    ];
+    $('result-table').innerHTML = rows.map(([name, value, score, max]) =>
+      `<tr><td>${name}</td><td>${value}</td><td>${score} / ${max}</td></tr>`).join('') + `<tr><td><b>Оценка</b></td><td></td><td><b>${m.score}</b></td></tr>`;
+    const curses = m.curses ? `, за проклятия ${m.cursePoints} из ${m.curses}` : '';
+    $('result-rewards').innerHTML = [
+      `Очки прокачки: <b>+${m.gained}</b> <span class="small dim">(за рейтинг ${m.rankPoints}${curses}; по каждому боссу считается лучший бой)</span>`,
+      `Монеты от трактирщика: <b>+${m.coinsGained}</b>`,
+      `<span class="small dim">Всего: очков ${m.points}, монет ${m.coins}</span>`,
+      m.firstStar ? '<b style="color:#ffcf3a">★ Звёздочка на карте!</b>' : '',
+    ].filter(Boolean).join('<br>');
+    $('result').hidden = false;
+  }
+
   update() {
     const game = this.game, input = game.input, now = game.now;
     if (now > this.announceUntil) $('announce').style.opacity = 0;
@@ -99,6 +129,11 @@ export class Hud {
       if (input.hitAlways('help')) this.toggle('controls');
       if (input.hitAlways('debug')) this.toggle('debug');
       if (!$('controls').hidden && input.hitAlways('back')) this.toggle('controls', false);
+      // Итоги боя закрываются по Esc или E — и это нажатие больше никуда не идёт.
+      if (!$('result').hidden && (input.hitAlways('back') || input.hitAlways('interact'))) {
+        $('result').hidden = true;
+        for (const c of [...input.bindings.back, ...input.bindings.interact]) input.pressed.delete(c);
+      }
     }
 
     // Диалог: закрыть, листать, или закрыть, если отошёл.
@@ -128,6 +163,13 @@ export class Hud {
       const local = game.local;
       $('dash').classList.toggle('off', now < local.nextRoll);
       $('parry').classList.toggle('off', now < local.parryReadyAt && !local.parrying);
+      // Снаряжение из-под камня: способность с перезарядкой и оберег.
+      const ability = ABILITIES[me.ability], charm = CHARMS[me.charm];
+      $('gear').hidden = !ability && !charm;
+      const cooldown = me.abilityCooldown ?? 0;
+      $('gear-ability').textContent = ability ? `${keyName(input.bindings.ability[0])} — ${ability.name}${cooldown > 0 ? `: ${Math.ceil(cooldown)} с` : ''}` : '';
+      $('gear-ability').classList.toggle('off', cooldown > 0);
+      $('gear-charm').textContent = charm ? `Оберег: ${charm.name}${me.charm === 'belt' && me.beltUsed ? ' (порван)' : ''}` : '';
     }
 
     const mate = game.players.find((p) => p.id !== me?.id);
@@ -153,6 +195,8 @@ export class Hud {
       marks.forEach((m, i) => $('boss-marks').children[i]?.classList.toggle('passed', fraction <= m + 0.001));
       const names = PHASES[boss.kind];
       $('boss-phase').textContent = names ? `Фаза ${boss.phase}: ${names[boss.phase - 1] ?? ''}` : boss.phase > 1 ? 'Злится!' : '';
+      const curses = (session?.curses ?? []).map((c) => CURSES[c]?.name).filter(Boolean);
+      $('boss-curses').textContent = curses.length ? `Проклятия: ${curses.join(', ')}` : '';
     }
 
     this.updatePrompt(onMap);
@@ -178,8 +222,8 @@ export class Hud {
     const k = (action) => keyName(game.input.bindings[action][0]);
     const move = ['up', 'left', 'down', 'right'].map(k).join('');
     $('hint').textContent = onMap
-      ? (game.session.stoneOpen ? `1 / 2 / 3 — выбрать сложность     ${k('back')} — отойти` : `${move} — бежать избушкой     ${k('interact')} — в бой у логова     ${k('back')} — отойти от карты`)
-      : `${k('light')}/${k('heavy')} — атаки   ${k('card')} — карта   ${k('dash')} — перекат   ${k('parry')} — парирование   ${k('interact')} — действие   ${k('help')} — управление   ${k('debug')} — отладка`;
+      ? (game.session.stoneOpen ? `Выбери сложность и снаряжение     ${k('back')} — отойти` : `${move} — бежать избушкой     ${k('interact')} — в бой у логова     ${k('back')} — отойти от карты`)
+      : `${k('light')}/${k('heavy')} — атаки   ${k('card')} — карта   ${k('dash')} — перекат   ${k('parry')} — парирование   ${k('ability')} — магия   ${k('interact')} — действие   ${k('help')} — управление   ${k('debug')} — отладка`;
   }
 
   updateMap(onMap) {
@@ -190,21 +234,48 @@ export class Hud {
         let defeated = 0, total = 0;
         BOSSES.forEach((b, k) => { if (b.world === i) { total++; if (session.results[k] >= 0) defeated++; } });
         return `<div style="color:${open ? w.color : '#8c8080'}">${w.name}: ${open ? `${defeated}/${total}` : 'закрыто'}</div>`;
-      }).join('');
+      }).join('') + `<div class="small">Очки прокачки: ${session.points ?? 0}<br>Монеты: ${session.coins ?? 0}</div>`;
     }
 
-    // Камень на распутье: три надписи — три сложности.
-    const open = onMap && session.stoneOpen && session.stoneBoss >= 0;
+    // Камень на распутье: сложность и по три на выбор — оружие, бытовая магия, оберег, проклятия.
+    const offer = session?.offer;
+    const open = onMap && session.stoneOpen && session.stoneBoss >= 0 && offer;
     $('stone').hidden = !open;
-    if (!open) { this.stoneKey = ''; return; }
-    const key = `${session.stoneBoss}:${session.results[session.stoneBoss]}`;
+    if (!open) { this.stoneKey = ''; this.pick = null; return; }
+    const key = `${session.stoneBoss}:${JSON.stringify(offer)}`;
     if (key === this.stoneKey) return;
     this.stoneKey = key;
-    const boss = BOSSES[session.stoneBoss], best = session.results[session.stoneBoss];
+    this.pick = { d: 0, weapon: offer.weapons[0], ability: offer.abilities[0] ?? null, charm: offer.charms[0] ?? null, curses: new Set() };
+    const boss = BOSSES[session.stoneBoss];
     $('stone-title').textContent = boss.name;
     $('stone-description').textContent = boss.description;
-    $('stone-lines').innerHTML = DIFFICULTIES.map((d, i) =>
-      `<button class="stone-line" data-d="${i}">${i + 1}. <em>«${d.stone}»</em><br><b>${d.name}</b>${best >= i ? ' ✓' : ''}<br><span class="small">${d.description}</span></button>`).join('');
-    for (const button of $('stone-lines').children) button.onclick = () => game.send({ t: 'difficulty', d: Number(button.dataset.d) });
+    this.renderStone();
+  }
+
+  renderStone() {
+    const session = this.game.session, offer = session.offer, pick = this.pick;
+    const best = session.results[session.stoneBoss], rank = session.ranks?.[session.stoneBoss] ?? -1;
+    const card = (cls, picked, data, name, text) =>
+      `<button class="choice ${cls}${picked ? ' picked' : ''}" ${data}><b>${name}</b>${text}</button>`;
+    $('stone-difficulty').innerHTML = DIFFICULTIES.map((d, i) =>
+      card('', pick.d === i, `data-d="${i}"`, `${d.name}${best >= i ? ' ✓' : ''}`, d.description)).join('');
+    $('stone-weapons').innerHTML = offer.weapons.map((w) =>
+      card('', pick.weapon === w, `data-weapon="${w}"`, WEAPONS[w].name, WEAPONS[w].light[0].projectile ? 'Дальний бой' : 'Ближний бой')).join('');
+    $('stone-abilities').innerHTML = offer.abilities.map((a) => card('', pick.ability === a, `data-ability="${a}"`, ABILITIES[a].name, ABILITIES[a].description)).join('');
+    $('stone-charms').innerHTML = offer.charms.map((c) => card('', pick.charm === c, `data-charm="${c}"`, CHARMS[c].name, CHARMS[c].description)).join('');
+    $('stone-curses').innerHTML = offer.curses.map((c) => card('curse', pick.curses.has(c), `data-curse="${c}"`, CURSES[c].name, CURSES[c].description)).join('');
+    const n = pick.curses.size;
+    const bestText = rank >= 0 ? `Лучший рейтинг: ${RANKS[rank].name}. ` : '';
+    $('stone-summary').textContent = `${bestText}${n ? `Проклятий: ${n}. Засчитаются за рейтинг: D — 1, C и B — до 2, A и выше — до 3.` : 'Без проклятий.'}`;
+
+    for (const button of document.querySelectorAll('#stone .choice')) button.onclick = () => {
+      const d = button.dataset;
+      if (d.d !== undefined) pick.d = Number(d.d);
+      if (d.weapon !== undefined) pick.weapon = Number(d.weapon);
+      if (d.ability) pick.ability = d.ability;
+      if (d.charm) pick.charm = d.charm;
+      if (d.curse) { if (pick.curses.has(d.curse)) pick.curses.delete(d.curse); else pick.curses.add(d.curse); }
+      this.renderStone();
+    };
   }
 }

@@ -1,7 +1,7 @@
 // KnightHead в браузере: сервер раздаёт страницу игры. Сейчас игра одиночная и считается в самом браузере;
 // общий бой для двух богатырей по WebSocket (/ws) уже есть — кооп вернём позже (его проверяет selftest.js).
 //
-//   node server/server.js [--port 7777] [--boss N] [--difficulty 0|1|2] [--debugwin] [--godmode] [--progressfile путь]
+//   node server/server.js [--port 7777] [--boss N] [--difficulty 0|1] [--debugwin] [--godmode] [--progressfile путь]
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { networkInterfaces } from 'node:os';
@@ -21,7 +21,7 @@ export function parseFlags(argv) {
   return {
     port: Number(value('--port', process.env.PORT ?? 7777)),
     boss: Number(value('--boss', -1)),
-    difficulty: Number(value('--difficulty', 1)),
+    difficulty: Number(value('--difficulty', 0)),
     debugwin: argv.includes('--debugwin'),
     godmode: argv.includes('--godmode'),
     quiet: argv.includes('--quiet'),
@@ -53,7 +53,7 @@ async function serveFile(request, response) {
 export function startServer(flags) {
   const game = new Game(flags, {
     load: (count) => loadProgress(flags.progressFile, count),
-    save: (results) => saveProgress(flags.progressFile, results),
+    save: (data) => saveProgress(flags.progressFile, data),
   });
   const server = createServer(serveFile);
   attachWebSocket(server, '/ws', (socket) => game.join(socket));

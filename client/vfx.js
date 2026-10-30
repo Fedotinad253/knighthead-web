@@ -17,6 +17,8 @@ export class Vfx {
   slash(x, z, dx, dz, range, arc, color) { this.add({ kind: 'slash', x, z, dx, dz, range, arc, color, until: this.now + 0.15 }); }
   parryFlash(x, z) { this.add({ kind: 'parry', x, z, until: this.now + 0.35 }); }
   text(x, z, y, text, color = '#fff', duration = 1.2) { this.add({ kind: 'text', x, z, y, text, color, until: this.now + duration, duration }); }
+  /** Брошенная бытовая магия: летит дугой из (x, z) в (tx, tz). */
+  toss(kind, x, z, tx, tz, flight = 0.35) { this.add({ kind: 'toss', what: kind, x, z, tx, tz, until: this.now + flight }); }
   damage(x, z, amount) { this.add({ kind: 'text', x: x + (Math.random() - 0.5) * 0.8, z, y: 2.4, text: String(amount), color: '#fff', until: this.now + 0.8, duration: 0.8, small: true }); }
 
   /** Всё, что лежит на земле, — под персонажами. */
@@ -62,12 +64,21 @@ export class Vfx {
         ctx.fillStyle = g;
         ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
+      } else if (i.kind === 'toss') {
+        const x = i.x + (i.tx - i.x) * t, z = i.z + (i.tz - i.z) * t, y = 1.2 + Math.sin(t * Math.PI) * 2;
+        const [px, py] = view.project(x, z, y);
+        ctx.fillStyle = TOSS_COLORS[i.what] ?? '#fff';
+        ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+        ctx.lineWidth = Math.max(1, view.s * 0.03);
+        ctx.beginPath(); ctx.arc(px, py, view.s * 0.16, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       } else if (i.kind === 'text') {
         view.label(i.x, i.z, i.y + t * 0.8, i.text, i.color, i.small ? 0.36 : 0.5, 1 - Math.max(0, t - 0.6) / 0.4);
       }
     }
   }
 }
+
+const TOSS_COLORS = { salt: '#f4f1ea', peas: '#b5c95a', coals: '#ff7a2a' };
 
 function drawLine(view, i, t) {
   const ctx = view.ctx;

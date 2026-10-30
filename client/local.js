@@ -2,20 +2,17 @@
 // Клиент общается с ней теми же сообщениями, что и по сети, — поэтому кооп потом вернётся без переделок.
 // Прогресс хранится в localStorage. Для проверки: ?boss=0&difficulty=1&debugwin&godmode.
 import { Game } from '../shared/sim/game.js';
+import { normalizeProgress } from '../shared/progress.js';
 
 const KEY = 'knighthead.progress';
 
 const progress = {
   load(count) {
-    const results = Array(count).fill(-1);
-    try {
-      (JSON.parse(localStorage.getItem(KEY))?.bossResults ?? []).slice(0, count)
-        .forEach((r, i) => { results[i] = Number.isInteger(r) ? r : -1; });
-    } catch { /* сохранения нет или хранилище недоступно */ }
-    return results;
+    try { return normalizeProgress(JSON.parse(localStorage.getItem(KEY)), count); }
+    catch { return normalizeProgress(null, count); } // сохранения нет или хранилище недоступно
   },
-  save(results) {
-    try { localStorage.setItem(KEY, JSON.stringify({ bossResults: results })); } catch { /* без сохранения */ }
+  save(data) {
+    try { localStorage.setItem(KEY, JSON.stringify(data)); } catch { /* без сохранения */ }
   },
 };
 
@@ -24,7 +21,7 @@ export class LocalWorld {
     const params = new URLSearchParams(location.search);
     this.game = new Game({
       boss: params.has('boss') ? Number(params.get('boss')) : -1,
-      difficulty: Number(params.get('difficulty') ?? 1),
+      difficulty: Number(params.get('difficulty') ?? 0),
       debugwin: params.has('debugwin'), godmode: params.has('godmode'), quiet: false, allowDebug: true,
     }, progress);
     // «Сокет» внутри страницы: сообщения доходят сразу.
