@@ -2,7 +2,7 @@
 // (одиночная игра), и на Node-сервере (кооп). Здесь решается: где мы (таверна, карта, арена), где избушка, какой босс и сложность, урон, карты, снаряды.
 // Богатырём управляет его игрок у себя в браузере и присылает позицию (отзывчиво, как Owner-режим в Unity);
 // попадания по себе он тоже определяет сам — так уклонение и парирование честны по тому, что он видит.
-import { WEAPONS, BOSSES, DIFFICULTIES, WORLDS, CARDS, PLAYER, SESSION, ABILITIES, RANKS, RANK_S_PLUS, rateFight, attackStep, ATTACK } from '../data.js';
+import { WEAPONS, BOSSES, DIFFICULTIES, WORLDS, CARDS, PLAYER, SESSION, ABILITIES, MAGIC, RANKS, RANK_S_PLUS, rateFight, attackStep, ATTACK } from '../data.js';
 import { emptyProgress, totalPoints } from '../progress.js';
 import { SCENES, MAP, clampOnMap, nodeNear, nearestInteractable } from '../scenes.js';
 import { Likho } from './likho.js';
@@ -33,6 +33,7 @@ export class Game {
     /** Что выпало на выбор у камня перед боем, и что взято с собой в бой. */
     this.offer = null;
     this.loadout = null;
+    this.preparing = false;
     this.curses = new Set();
     /** Следы бытовой магии на земле (соль, горох, угли) и срезанные кусты. */
     this.effects = [];
@@ -64,7 +65,7 @@ export class Game {
     const player = {
       id: this.nextId++, slot, socket, x: spawn[0], z: spawn[1], fx: 0, fz: 1,
       hp: PLAYER.maxHealth, downed: false, weapon: 0, cards: 0, dropped: null, cursed: false,
-      ability: null, abilityReadyAt: 0, charm: null, beltUsed: false,
+      ability: null, abilityReadyAt: 0, magic: null, magicReadyAt: 0, charm: null, beltUsed: false,
       anim: {}, lastState: this.clock.now,
     };
     this.players.push(player);
@@ -146,6 +147,7 @@ export class Game {
       }
 
       case 'ability': this.useAbility(player, m); break;
+      case 'magic': this.useMagic(player, m); break;
       case 'interact': this.interact(player, m.id); break;
       case 'revive': {
         const target = this.players.find((p) => p.id === m.target);
@@ -169,22 +171,27 @@ export class Game {
         if (!this.isWorldUnlocked(BOSSES[boss].world)) break;
         this.stoneBoss = boss;
         this.stoneOpen = true;
-        this.offer = this.rollOffer(boss);
         break;
       }
+      case 'difficulty':
+        if (this.stoneOpen && this.stoneBoss >= 0) this.startBoss(this.stoneBoss, m.d);
+        break;
       case 'startFight': {
-        if (!this.stoneOpen || this.stoneBoss < 0 || !this.offer) break;
+        // Снаряжение выбирают уже на локации босса, пока бой не начался.
+        if (this.state !== SESSION.ARENA || !this.preparing || !this.offer) break;
         const o = this.offer;
         const loadout = {
           weapon: o.weapons.includes(m.weapon) ? m.weapon : o.weapons[0],
           ability: o.abilities.includes(m.ability) ? m.ability : o.abilities[0] ?? null,
+          magic: o.magic.includes(m.magic) ? m.magic : o.magic[0] ?? null,
           charm: o.charms.includes(m.charm) ? m.charm : o.charms[0] ?? null,
           curses: [...new Set(Array.isArray(m.curses) ? m.curses : [])].filter((c) => o.curses.includes(c)),
         };
-        this.startBoss(this.stoneBoss, m.d, loadout);
+        this.beginFight(loadout);
         break;
       }
-      case 'closeStone': this.stoneOpen = false; this.stoneBoss = -1; this.offer = null; break;
+      case 'retreat': if (this.state === SESSION.ARENA && this.preparing) this.goTo(SESSION.MAP); break;
+      case 'closeStone': this.stoneOpen = false; this.stoneBoss = -1; break;
       case 'leaveMap': if (this.state === SESSION.MAP && !this.stoneOpen) this.goTo(SESSION.TAVERN); break;
       case 'debug': if (this.flags.allowDebug) this.debug(player, m); break;
     }
@@ -203,7 +210,7 @@ export class Game {
       case 'killBoss': if (boss) { boss.health.hp = 0; boss.health.onDepleted?.(); } break;
       case 'tavern': this.goTo(SESSION.TAVERN); break;
       case 'map': this.goTo(SESSION.MAP); break;
-      case 'fight': this.startBoss(m.boss | 0, m.d | 0); break;
+      case 'fight': this.startBoss(m.boss | 0, m.d | 0, false); break;
       case 'unlock': this.saved.results = this.results.map((r) => Math.max(r, 0)); this.progress.save(this.saved); break;
       case 'resetProgress': this.saved = emptyProgress(BOSSES.length); this.progress.save(this.saved); break;
     }
@@ -263,11 +270,53 @@ export class Game {
 
   // ---------------------------------------------------------------- Снаряжение и бытовая магия
 
-  /** По три случайных из набора босса: оружие, способность, оберег, проклятия. */
+  /** По три случайных из набора босса: оружие, бытовая способность, магия, оберег, проклятия. */
   rollOffer(boss) {
     const pools = BOSSES[boss].pools;
     const pick = (list) => shuffle([...list]).slice(0, 3);
-    return { weapons: pick(pools.weapons).sort((a, b) => a - b), abilities: pick(pools.abilities), charms: pick(pools.charms), curses: pick(pools.curses) };
+    return { weapons: pick(pools.weapons).sort((a, b) => a - b), abilities: pick(pools.abilities), magic: pick(pools.magic),
+      charms: pick(pools.charms), curses: pick(pools.curses) };
+  }
+
+  /** Магия (R): ветер — конусом в сторону курсора, искра и морок — в точку, живая вода — на себя. */
+  useMagic(player, m) {
+    const id = player.magic, spell = MAGIC[id], now = this.clock.now;
+    if (!spell || this.state !== SESSION.ARENA || player.downed || now < player.magicReadyAt || !this.boss) return;
+    if (!Number.isFinite(m.x) || !Number.isFinite(m.z)) return;
+    let x = m.x, z = m.z;
+    const dx = x - player.x, dz = z - player.z, d = Math.hypot(dx, dz);
+    if (spell.range && d > spell.range) { x = player.x + dx / d * spell.range; z = player.z + dz / d * spell.range; }
+    [x, z] = this.clampToBossArea(x, z);
+    player.magicReadyAt = now + spell.cooldown;
+    this.broadcast({ t: 'magicFx', kind: id, x: player.x, z: player.z, tx: x, tz: z, delay: spell.delay ?? 0 });
+
+    if (id === 'water') {
+      const healed = Math.min(spell.heal, PLAYER.maxHealth - player.hp);
+      player.hp += healed;
+      this.floatText(player.x, player.z, 2.7, `+${Math.round(healed)}`, '#7be08a', 1.2);
+    } else if (id === 'wind') {
+      const [nx, nz] = d > 0.05 ? [dx / d, dz / d] : [player.fx, player.fz];
+      this.boss.onWind?.(player.x, player.z, nx, nz, spell);
+    } else if (id === 'spark') {
+      this.tasks.start((function* (game) {
+        yield spell.delay;
+        if (game.state !== SESSION.ARENA || !game.boss) return;
+        game.flash(x, z, spell.radius);
+        game.shake(0.25, 0.3);
+        for (const i of game.bushesIn(x, z, spell.radius + 0.4)) game.cutBush(i, spell.damage);
+        if (Math.hypot(game.boss.x - x, game.boss.z - z) < spell.radius + (game.boss.radius ?? 0.5)) game.damageBoss(player, spell.damage, false);
+      })(this));
+    } else if (id === 'decoy') {
+      this.decoy = { id: 'decoy', x, z, expire: now + spell.duration, downed: false, owner: player.id };
+    }
+  }
+
+  /** Морок-двойник, пока не рассеялся (или null). */
+  activeDecoy() { return this.decoy && this.clock.now < this.decoy.expire ? this.decoy : null; }
+
+  clampToBossArea(x, z) {
+    const radius = this.sceneData.bossRadius ?? 14, r = Math.hypot(x, z);
+    return r > radius ? [x * radius / r, z * radius / r] : [x, z];
   }
 
   /** Бросить способность в точку (x, z). Серп — срезает ближайший куст, бросать не нужно. */
@@ -286,8 +335,7 @@ export class Game {
     let x = m.x, z = m.z;
     const dx = x - player.x, dz = z - player.z, d = Math.hypot(dx, dz);
     if (d > a.range) { x = player.x + dx / d * a.range; z = player.z + dz / d * a.range; }
-    const radius = this.sceneData.bossRadius ?? 14, r = Math.hypot(x, z);
-    if (r > radius) { x *= radius / r; z *= radius / r; }
+    [x, z] = this.clampToBossArea(x, z);
     player.abilityReadyAt = now + a.cooldown;
     // Бросок летит 0.35 с, потом ложится на землю.
     this.broadcast({ t: 'abilityFx', kind: id, x: player.x, z: player.z, tx: x, tz: z, flight: 0.35 });
@@ -345,17 +393,42 @@ export class Game {
     return [defeated, total];
   }
 
-  /** В бой. loadout — выбранное у камня; если нет (отладка, автозапуск) — первое из случайного набора, без проклятий. */
-  startBoss(boss, difficulty, loadout = null) {
+  /**
+   * На локацию босса. Бой не начинается, пока богатырь не выберет снаряжение из случайного набора (prepare).
+   * Без выбора (отладка, автозапуск) — сразу в бой с первым из набора и без проклятий.
+   */
+  startBoss(boss, difficulty, prepare = true) {
     if (!BOSSES[boss] || !this.isWorldUnlocked(BOSSES[boss].world)) return;
-    if (!loadout) {
-      const o = this.rollOffer(boss);
-      loadout = { weapon: o.weapons[0], ability: o.abilities[0] ?? null, charm: o.charms[0] ?? null, curses: [] };
-    }
-    this.loadout = loadout;
     this.currentBoss = boss;
     this.difficulty = Math.min(Math.max(difficulty | 0, 0), DIFFICULTIES.length - 1);
     this.goTo(SESSION.ARENA, BOSSES[boss].arena);
+    const o = this.rollOffer(boss);
+    if (prepare) {
+      this.offer = o;
+      this.preparing = true;
+      this.announce(`${BOSSES[boss].name} — выбери снаряжение`);
+    } else this.beginFight({ weapon: o.weapons[0], ability: o.abilities[0] ?? null, magic: o.magic[0] ?? null, charm: o.charms[0] ?? null, curses: [] });
+  }
+
+  /** Снаряжение выбрано — босс выходит, бой начинается. */
+  beginFight(loadout) {
+    const entry = BOSSES[this.currentBoss], d = DIFFICULTIES[this.difficulty];
+    this.preparing = false;
+    this.offer = null;
+    this.loadout = loadout;
+    this.curses = new Set(loadout.curses);
+    for (const p of this.players) {
+      p.weapon = loadout.weapon;
+      p.ability = loadout.ability;
+      p.magic = loadout.magic;
+      p.charm = loadout.charm;
+      p.abilityReadyAt = 0;
+      p.magicReadyAt = 0;
+      p.beltUsed = false;
+    }
+    this.stats = { start: this.clock.now, damageTaken: 0, parries: 0 };
+    this.boss = entry.kind === 'likho' ? new Likho(this, d) : new Dummy(this, d, entry.name);
+    this.announce(`${entry.name} — ${d.name}`);
   }
 
   goTo(state, scene = state === SESSION.TAVERN ? 'tavern' : null) {
@@ -364,9 +437,12 @@ export class Game {
     this.stoneOpen = false;
     this.stoneBoss = -1;
     this.offer = null;
+    this.preparing = false;
+    this.stats = null;
+    this.decoy = null;
     this.effects = [];
     this.cutBushes = new Set();
-    if (state !== SESSION.ARENA) this.curses = new Set();
+    this.curses = new Set();
     this.mapInput.clear();
     this.fightResolved = false;
     this.victory = null;
@@ -386,11 +462,10 @@ export class Game {
       p.slipperyUntil = 0;
       p.beltUsed = false;
       p.abilityReadyAt = 0;
-      // В бою — то, что взято у камня; вне боя бытовой магии и оберегов нет.
-      const fight = state === SESSION.ARENA && this.loadout;
-      if (fight) p.weapon = this.loadout.weapon;
-      p.ability = fight ? this.loadout.ability : null;
-      p.charm = fight ? this.loadout.charm : null;
+      // Бытовая способность, магия и оберег — только в бою (выдаются в beginFight).
+      p.ability = null;
+      p.magic = null;
+      p.charm = null;
       if (state !== SESSION.MAP) {
         const [x, z] = this.sceneData.spawns[p.slot];
         this.teleport(p, x, z, 0, 1);
@@ -398,13 +473,7 @@ export class Game {
     });
     this.log(`Сцена ${state === SESSION.ARENA ? this.scene : state}, игроков: ${this.players.length}`);
 
-    if (state === SESSION.ARENA) {
-      const entry = BOSSES[this.currentBoss], d = DIFFICULTIES[this.difficulty];
-      this.curses = new Set(this.loadout?.curses ?? []);
-      this.stats = { start: this.clock.now, damageTaken: 0, parries: 0 };
-      this.boss = entry.kind === 'likho' ? new Likho(this, d) : new Dummy(this, d, entry.name);
-      this.announce(`${entry.name} — ${d.name}`);
-    } else this.announce(state === SESSION.MAP ? 'Карта' : 'Избушка на курьих ножках');
+    if (state !== SESSION.ARENA) this.announce(state === SESSION.MAP ? 'Карта' : 'Избушка на курьих ножках');
   }
 
   sessionInfo() {
@@ -543,7 +612,7 @@ export class Game {
 
     if (this.autoStartAt > 0 && this.clock.now >= this.autoStartAt && this.players.length) {
       this.autoStartAt = 0;
-      this.startBoss(this.flags.boss, this.flags.difficulty);
+      this.startBoss(this.flags.boss, this.flags.difficulty, false);
     }
 
     if (this.state === SESSION.MAP) this.moveHut(dt);
@@ -607,15 +676,17 @@ export class Game {
     return {
       t: 'snap', time: Math.round(now * 1000) / 1000,
       session: { state: this.state, hut: this.hut.map(r2), stoneOpen: this.stoneOpen, stoneBoss: this.stoneBoss,
-        boss: this.currentBoss, difficulty: this.difficulty, offer: this.offer, curses: [...this.curses], ...this.progressInfo() },
+        boss: this.currentBoss, difficulty: this.difficulty, offer: this.offer, preparing: this.preparing, curses: [...this.curses], ...this.progressInfo() },
       players: this.players.map((p) => ({
         id: p.id, slot: p.slot, x: r2(p.x), z: r2(p.z), fx: r2(p.fx), fz: r2(p.fz), hp: Math.round(p.hp), downed: p.downed,
         weapon: p.weapon, cards: Math.round(p.cards * 100) / 100, dropped: p.dropped, cursed: p.cursed,
         slippery: (p.slipperyUntil ?? 0) > now, anim: p.anim,
         ability: p.ability, abilityCooldown: Math.max(0, r2(p.abilityReadyAt - now)), charm: p.charm, beltUsed: p.beltUsed,
+        magic: p.magic, magicCooldown: Math.max(0, r2(p.magicReadyAt - now)),
       })),
       effects: this.effects.map((e) => ({ id: e.id, kind: e.kind, x: r2(e.x), z: r2(e.z), r: e.r, left: r2(e.expire - now) })),
       cut: [...this.cutBushes],
+      decoy: this.activeDecoy() ? { x: r2(this.decoy.x), z: r2(this.decoy.z), owner: this.decoy.owner, left: r2(this.decoy.expire - now) } : null,
       boss: this.boss?.snapshot() ?? null,
       hazards: this.hazards.map((h) => h.type === 'proj'
         ? { id: h.id, type: 'proj', x: r2(h.x), z: r2(h.z), y: h.y, vx: r2(h.vx), vz: r2(h.vz), r: h.r, parry: h.parryable, dmg: h.damage }

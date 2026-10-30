@@ -1,6 +1,6 @@
 // Свой богатырь: управление, атаки и защита считаются здесь, в браузере игрока (отзывчиво),
 // урон, карты и снаряды — на сервере. Перенесено из PlayerController, PlayerCombat, PlayerDefense, PlayerInteractor.
-import { WEAPONS, PLAYER as P, ATTACK, ABILITIES, attackStep, stepDuration, CARDS } from '../shared/data.js';
+import { WEAPONS, PLAYER as P, ATTACK, ABILITIES, MAGIC, attackStep, stepDuration, CARDS } from '../shared/data.js';
 import { resolveCollisions, nearestInteractable } from '../shared/scenes.js';
 import { playSound, blip } from './assets.js';
 import { bogatyrPose } from './rig.js';
@@ -80,7 +80,8 @@ export class LocalPlayer {
   update(dt) {
     const game = this.game, input = game.input, me = this.me;
     if (!me) return;
-    const locked = game.cutscene || game.dialogueOpen;
+    // Пока выбирается снаряжение перед боем, богатырь стоит.
+    const locked = game.cutscene || game.dialogueOpen || !!game.session?.preparing;
 
     if (this.stunned) { this.vx = this.vz = 0; this.rollEnd = 0; }
 
@@ -292,13 +293,23 @@ export class LocalPlayer {
 
   onCardsChanged() { this.pendingCards = 0; }
 
-  // ---------------------------------------------------------------- Бытовая магия
+  // ---------------------------------------------------------------- Бытовая способность и магия
 
   /** Готова ли способность (перезарядку считает логика боя; здесь — чтобы не слать лишнего). */
   get abilityReady() { return !!this.me?.ability && (this.me.abilityCooldown ?? 0) <= 0 && this.now >= (this.abilitySentAt ?? 0) + 0.3; }
 
-  /** Q — бросить способность под курсор (серп срезает ближайший куст сам). */
+  get magicReady() { return !!this.me?.magic && (this.me.magicCooldown ?? 0) <= 0 && this.now >= (this.magicSentAt ?? 0) + 0.3; }
+
+  /** Q — бросить способность под курсор (серп срезает ближайший куст сам). R — магия в сторону курсора. */
   updateAbility() {
+    if (this.game.input.magicPressed && !this.rolling && this.magicReady) {
+      const [mx, mz] = this.game.view.unproject(this.game.input.mouseX, this.game.input.mouseY);
+      this.magicSentAt = this.now;
+      this.cancelAttack();
+      if (this.me.magic !== 'water') this.setFacing(mx - this.x, mz - this.z);
+      this.game.send({ t: 'magic', x: r2(mx), z: r2(mz) });
+      blip(MAGIC[this.me.magic]?.range ? 'dash' : 'shot');
+    }
     if (!this.game.input.abilityPressed || this.rolling || !this.abilityReady) return;
     const a = ABILITIES[this.me.ability];
     const [mx, mz] = this.game.view.unproject(this.game.input.mouseX, this.game.input.mouseY);

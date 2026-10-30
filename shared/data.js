@@ -78,10 +78,10 @@ export const WORLDS = [
  * par — за сколько секунд бой считается быстрым (для рейтинга). pools — из чего выпадает снаряжение перед боем:
  * под каждого босса только то, что в этом бою полезно (у Лиха — только ближний бой).
  */
-const DUMMY_POOLS = { weapons: [0, 1, 2, 3, 4], abilities: ['peas', 'coals'], charms: ['belt', 'wolf'], curses: ['cataract'] };
+const DUMMY_POOLS = { weapons: [0, 1, 2, 3, 4], abilities: ['peas', 'coals'], magic: ['spark', 'water'], charms: ['belt', 'wolf'], curses: ['cataract'] };
 export const BOSSES = [
   { name: 'Лихо Одноглазое', world: 0, description: 'Хитрое и скрытное. Нападает из кустов', kind: 'likho', arena: 'forest', par: 150,
-    pools: { weapons: [0, 1, 2], abilities: ['salt', 'peas', 'sickle', 'coals'], charms: ['chicken', 'belt', 'bear', 'wolf'],
+    pools: { weapons: [0, 1, 2], abilities: ['salt', 'peas', 'sickle', 'coals'], magic: ['wind', 'spark', 'decoy', 'water'], charms: ['chicken', 'belt', 'bear', 'wolf'],
       curses: ['cataract', 'wicked', 'crooked', 'hiddenTraps'] } },
   { name: 'Соловей-Разбойник', world: 0, description: '', kind: 'dummy', arena: 'arena', par: 60, pools: DUMMY_POOLS },
   { name: 'Змей Горыныч', world: 0, description: 'Страж Калинова моста', kind: 'dummy', arena: 'arena', par: 60, pools: DUMMY_POOLS },
@@ -106,7 +106,7 @@ export const DIFFICULTIES = [
 ];
 
 /**
- * Бытовая магия (кнопка Q). Бросок — в точку под курсором (не дальше range). cooldown — секунды.
+ * Бытовая способность (кнопка Q). Бросок — в точку под курсором (не дальше range). cooldown — секунды.
  */
 export const ABILITIES = {
   salt: { name: 'Соль', cooldown: 10, range: 9, radius: 1.8, duration: 6,
@@ -117,6 +117,18 @@ export const ABILITIES = {
     description: 'Срезает ближайший куст до конца боя — Лиху негде прятаться. Сидело в нём — получит по лапам.' },
   coals: { name: 'Горшок с углями', cooldown: 12, range: 9, radius: 1.9, duration: 5, damage: 18,
     description: 'Горящие угли жгут врага, а куст в огне сгорает — вместе с тем, кто в нём прятался.' },
+};
+
+/** Магия (кнопка R) — заговоры и чары: сильнее бытовой, но перезаряжается дольше. */
+export const MAGIC = {
+  wind: { name: 'Ветер-ветрило', cooldown: 14, range: 6, arc: 70, push: 4,
+    description: 'Порыв ветра из ладоней отбрасывает врага и выдувает Лихо из куста.' },
+  spark: { name: 'Перунова искра', cooldown: 16, range: 10, radius: 1.6, delay: 0.6, damage: 55,
+    description: 'Через миг в точку под курсором бьёт молния. Куст от неё сгорает.' },
+  decoy: { name: 'Морок', cooldown: 20, range: 8, duration: 6,
+    description: 'Морок-двойник богатыря: Лихо бросается, кидает и ставит капканы на него.' },
+  water: { name: 'Живая вода', cooldown: 25, heal: 40, range: 0,
+    description: 'Глоток живой воды возвращает 40 здоровья.' },
 };
 
 /** Обереги — пассивные свойства на весь бой. */

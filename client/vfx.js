@@ -17,6 +17,8 @@ export class Vfx {
   slash(x, z, dx, dz, range, arc, color) { this.add({ kind: 'slash', x, z, dx, dz, range, arc, color, until: this.now + 0.15 }); }
   parryFlash(x, z) { this.add({ kind: 'parry', x, z, until: this.now + 0.35 }); }
   text(x, z, y, text, color = '#fff', duration = 1.2) { this.add({ kind: 'text', x, z, y, text, color, until: this.now + duration, duration }); }
+  /** Кольцо на земле, сжимающееся к центру (rgb — «r,g,b»): прицел искры, морок, живая вода. */
+  ring(x, z, r, duration, rgb) { this.add({ kind: 'ring', x, z, r, rgb, until: this.now + Math.max(0.2, duration) }); }
   /** Брошенная бытовая магия: летит дугой из (x, z) в (tx, tz). */
   toss(kind, x, z, tx, tz, flight = 0.35) { this.add({ kind: 'toss', what: kind, x, z, tx, tz, until: this.now + flight }); }
   damage(x, z, amount) { this.add({ kind: 'text', x: x + (Math.random() - 0.5) * 0.8, z, y: 2.4, text: String(amount), color: '#fff', until: this.now + 0.8, duration: 0.8, small: true }); }
@@ -44,6 +46,9 @@ export class Vfx {
         view.groundEllipse(i.x, i.z, i.r, i.r, `rgba(255,230,180,${0.55 * (1 - t)})`);
       } else if (i.kind === 'slash') {
         drawArc(view, i, t);
+      } else if (i.kind === 'ring') {
+        view.groundEllipse(i.x, i.z, i.r, i.r, null, `rgba(${i.rgb},${0.9 - 0.4 * t})`, 0.07);
+        view.groundEllipse(i.x, i.z, i.r * (1 - t), i.r * (1 - t), `rgba(${i.rgb},0.25)`);
       }
     }
   }

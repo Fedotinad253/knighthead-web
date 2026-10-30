@@ -57,12 +57,16 @@ canvas#game { position: fixed; inset: 0; width: 100vw; height: 100vh; display: b
   border: 1px solid var(--edge); border-radius: 12px; padding: 16px 22px; font-size: 18px; line-height: 1.45; }
 #dialogue-speaker { color: var(--gold); font-weight: 700; margin-bottom: 6px; }
 
-#stone { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(900px, 96vw); max-height: 96vh; overflow: auto;
+#stone { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(640px, 94vw); max-height: 96vh; overflow: auto;
   background: linear-gradient(#6b6b70, #4a4a50); border-radius: 18px 18px 8px 8px; padding: 16px 24px 14px;
   box-shadow: 0 20px 60px rgba(0,0,0,0.7), inset 0 0 40px rgba(0,0,0,0.5); text-align: center; border: 2px solid #2e2e33; }
 #stone-title { font-size: 30px; color: var(--gold); font-weight: 700; text-shadow: 0 2px 4px #000; }
 #stone-description { margin: 2px 0 8px; opacity: 0.85; }
-#stone h3 { margin: 10px 0 4px; font-size: 16px; color: var(--gold); text-align: left; text-shadow: 0 1px 2px #000; }
+.stone-buttons { margin-top: 12px; }
+#loadout { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(900px, 96vw); max-height: 96vh; overflow: auto;
+  background: rgba(20, 14, 10, 0.9); border: 1px solid var(--edge); border-radius: 14px; padding: 14px 22px; box-shadow: 0 20px 60px rgba(0,0,0,0.6); }
+#loadout-title { font-size: 26px; color: var(--gold); font-weight: 700; text-align: center; text-shadow: 0 2px 4px #000; }
+#loadout h3 { margin: 10px 0 4px; font-size: 16px; color: var(--gold); text-align: left; text-shadow: 0 1px 2px #000; }
 .choice-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 #stone-difficulty { grid-template-columns: repeat(2, 1fr); }
 .choice { text-align: left; padding: 8px 12px; border-radius: 8px; cursor: pointer; background: rgba(0,0,0,0.25); border: 2px solid rgba(0,0,0,0.35);
@@ -71,9 +75,9 @@ canvas#game { position: fixed; inset: 0; width: 100vw; height: 100vh; display: b
 .choice:hover { border-color: var(--edge); }
 .choice.picked { border-color: var(--gold); background: rgba(255, 217, 102, 0.16); box-shadow: 0 0 10px rgba(255, 217, 102, 0.35); }
 .choice.curse.picked { border-color: #d973ff; background: rgba(170, 70, 220, 0.2); box-shadow: 0 0 10px rgba(217, 115, 255, 0.4); }
-#stone-summary { margin: 10px 0 8px; min-height: 1.3em; }
+#loadout-summary { margin: 10px 0 8px; min-height: 1.3em; text-align: center; }
 #gear { margin-top: 6px; }
-#gear-ability.off { opacity: 0.45; }
+#gear-ability.off, #gear-magic.off { opacity: 0.45; }
 #boss-curses { color: #d9a3ff; text-shadow: 0 1px 3px #000; }
 #result { text-align: center; width: min(520px, 94vw); }
 #result-title { font-size: 26px; color: var(--gold); font-weight: 700; margin-top: 6px; }
@@ -82,11 +86,6 @@ canvas#game { position: fixed; inset: 0; width: 100vw; height: 100vh; display: b
 #result-table td { padding: 3px 6px; text-align: left; }
 #result-table td:last-child { text-align: right; color: var(--gold); }
 #result-rewards { line-height: 1.6; margin-bottom: 10px; font-size: 16px; }
-.stone-line { display: block; width: 100%; text-align: left; margin: 10px 0; padding: 12px 18px; border-radius: 8px; cursor: pointer;
-  background: rgba(0,0,0,0.25); border: 1px solid rgba(0,0,0,0.4); color: var(--ink); font: inherit; font-size: 17px; }
-.stone-line:hover { background: rgba(255, 217, 102, 0.15); border-color: var(--edge); }
-.stone-line b { font-size: 20px; color: #fff; }
-.stone-line em { color: #e6dcc6; font-style: italic; }
 
 .button { background: #7a4a22; color: #fff; border: 1px solid #c58a4a; border-radius: 8px; padding: 9px 20px; font: inherit; font-size: 16px; cursor: pointer; }
 .button:hover:not(:disabled) { background: #92592a; }

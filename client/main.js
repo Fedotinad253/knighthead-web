@@ -120,6 +120,12 @@ class Game {
         if (m.kind === 'sickle') this.vfx.slash(m.x, m.z, m.tx - m.x, m.tz - m.z, Math.hypot(m.tx - m.x, m.tz - m.z) + 1, 120, 'rgba(220,235,200,0.7)');
         else this.vfx.toss(m.kind, m.x, m.z, m.tx, m.tz, m.flight);
         break;
+      case 'magicFx':
+        if (m.kind === 'wind') this.vfx.slash(m.x, m.z, m.tx - m.x, m.tz - m.z, 6, 70, 'rgba(190,225,255,0.65)');
+        else if (m.kind === 'spark') this.vfx.ring(m.tx, m.tz, 1.6, m.delay, '255,230,120');
+        else if (m.kind === 'decoy') this.vfx.ring(m.tx, m.tz, 0.9, 0.4, '170,190,255');
+        else if (m.kind === 'water') this.vfx.ring(m.x, m.z, 1.1, 0.5, '120,230,150');
+        break;
       case 'result': this.hud.showResult(m); break;
     }
   }
@@ -297,6 +303,8 @@ class Game {
     const session = this.session, input = this.input;
     this.mapView.update(dt, session.hut);
     if (session.stoneOpen) {
+      for (const [code, d] of [['Digit1', 0], ['Digit2', 1], ['Numpad1', 0], ['Numpad2', 1]])
+        if (input.keyPressed(code)) this.send({ t: 'difficulty', d });
       if (input.backPressed) this.send({ t: 'closeStone' });
       return;
     }

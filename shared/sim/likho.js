@@ -24,6 +24,8 @@ const P = {
   contactDamage: 10,
 };
 
+/** Позы, в которых Лихо сидит в укрытии. */
+const HIDING = new Set(['Hidden', 'Peek', 'HiddenTree', 'PeekTree']);
 /** Позы, в которых Лихо открыто для ударов (для Медвежьего когтя). */
 const VULNERABLE = new Set(['Tired', 'Stunned', 'Exhausted']);
 /** Насколько медленнее Лихо на рассыпанном горохе. */
@@ -214,7 +216,21 @@ export class Likho {
     if (!spot) return null;
     if (!spot.behindTree && this.game.isBushCut(spot.x, spot.z)) return 'Негде спрятаться!';
     if (this.game.effectAt('salt', this.x, this.z, 0.9)) return 'Соль жжёт!';
+    if (this.now - (this.blownAt ?? -9) < 0.5) return 'Сдуло ветром!';
     return null;
+  }
+
+  /** Ветер-ветрило: попало в конус — отбрасывает от богатыря (сквозь кусты, но не сквозь стволы) и выдувает из укрытия. */
+  onWind(px, pz, nx, nz, spell) {
+    if (this.dead || this.cutscene) return;
+    const dx = this.x - px, dz = this.z - pz, d = Math.hypot(dx, dz);
+    if (d > spell.range + this.radius) return;
+    const angle = Math.acos(Math.max(-1, Math.min(1, (dx * nx + dz * nz) / Math.max(1e-3, d)))) * 180 / Math.PI;
+    if (d > 1 && angle > spell.arc / 2) return;
+    if (HIDING.has(this.pose)) this.blownAt = this.now;
+    const [ux, uz] = d > 0.05 ? [dx / d, dz / d] : [nx, nz];
+    for (let i = 0; i < 8; i++) if (this.step(ux, uz, spell.push / 8, false)) break;
+    this.game.floatText(this.x, this.z, 3, 'Ух!', '#bfe3ff', 1);
   }
 
   /** Куст срезали серпом или сожгли углями. Сидело в нём — получает урон (укрытие больше не спасает). */
@@ -225,7 +241,7 @@ export class Likho {
     this.applyDamage(damage);
   }
 
-  /** Бытовая магия богатыря легла на землю. Горох стучит — слепое Лихо слышит. */
+  /** Бытовая способность богатыря легла на землю. Горох стучит — слепое Лихо слышит. */
   onAbility(kind, x, z) {
     if (kind === 'peas') this.hear(x, z);
   }
@@ -289,7 +305,9 @@ export class Likho {
       // «Кривая доля» — неудачи вдвое чаще.
       yield rand(...P.misfortuneInterval) / this.d.attackSpeed / (this.game.curses.has('crooked') ? 2 : 1);
       if (this.dead || this.cutscene) continue;
-      const player = this.pickTarget();
+      // Неудачи падают на настоящих богатырей, а не на морок.
+      const alive = this.game.alivePlayers();
+      const player = alive[Math.floor(Math.random() * alive.length)];
       if (!player) continue;
       const slippery = !this.d.trimmed && Math.random() < 0.5;
       if (slippery) this.game.slippery(player, P.slipperyDuration);
@@ -689,14 +707,20 @@ export class Likho {
     return this.clampToArena(pick.x + side, pick.z + pick.treeOffset);
   }
 
+  /** Кого Лихо видит целью: пока есть морок-двойник — только его. */
+  targets() {
+    const decoy = this.game.activeDecoy();
+    return decoy ? [decoy] : this.game.alivePlayers();
+  }
+
   pickTarget() {
-    const alive = this.game.alivePlayers();
+    const alive = this.targets();
     return alive.length ? alive[Math.floor(Math.random() * alive.length)] : null;
   }
 
   pickNearest() {
     let best = null, bestDistance = Infinity;
-    for (const p of this.game.alivePlayers()) {
+    for (const p of this.targets()) {
       const d = Math.hypot(p.x - this.x, p.z - this.z);
       if (d < bestDistance) { best = p; bestDistance = d; }
     }

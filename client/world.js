@@ -40,6 +40,13 @@ export function drawWorld(game) {
   for (const item of scene.interactables ?? []) if (item.kind === 'exit') add(item.z + 1, () => drawExit(view, item, game.now));
 
   for (const p of game.players) if (p.visible) add(p.z, () => drawPlayer(game, p));
+  // Морок: полупрозрачный двойник того, кто его наслал.
+  const decoy = game.latest?.decoy, caster = decoy && game.players.find((p) => p.id === decoy.owner);
+  if (caster) add(decoy.z, () => {
+    view.ctx.globalAlpha = Math.min(1, decoy.left / 0.6) * (0.5 + Math.sin(game.now * 6) * 0.1);
+    drawPlayer(game, { ...caster, x: decoy.x, z: decoy.z, anim: {}, flashUntil: 0 });
+    view.ctx.globalAlpha = 1;
+  });
   for (const p of game.players) if (p.dropped) add(p.dropped[1], () => drawDroppedWeapon(view, p));
   if (game.boss) {
     const b = game.boss;

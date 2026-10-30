@@ -1,6 +1,6 @@
 // Интерфейс поверх игры (HTML): здоровье и карты, напарник, полоса босса, объявления, подсказка «E»,
 // диалог с NPC, камень на распутье (сложность и снаряжение перед боем), итоги боя, прогресс миров на карте, подсказка управления.
-import { WEAPONS, BOSSES, DIFFICULTIES, WORLDS, CARDS, PLAYER, SESSION, ABILITIES, CHARMS, CURSES, RANKS } from '../shared/data.js';
+import { WEAPONS, BOSSES, DIFFICULTIES, WORLDS, CARDS, PLAYER, SESSION, ABILITIES, MAGIC, CHARMS, CURSES, RANKS } from '../shared/data.js';
 import { MAP, nodeNear } from '../shared/scenes.js';
 import { ACTIONS, keyName } from './input.js';
 import { getVolume, setVolume, unlockAudio, blip } from './assets.js';
@@ -17,10 +17,11 @@ export class Hud {
     this.stoneKey = '';
     $('cards').innerHTML = Array.from({ length: CARDS.max }, () => '<div class="card"><i></i></div>').join('');
     $('stone-close').onclick = () => game.send({ t: 'closeStone' });
-    $('stone-go').onclick = () => {
+    $('loadout-go').onclick = () => {
       const p = this.pick;
-      if (p) game.send({ t: 'startFight', d: p.d, weapon: p.weapon, ability: p.ability, charm: p.charm, curses: [...p.curses] });
+      if (p) game.send({ t: 'startFight', weapon: p.weapon, ability: p.ability, magic: p.magic, charm: p.charm, curses: [...p.curses] });
     };
+    $('loadout-retreat').onclick = () => game.send({ t: 'retreat' });
     $('result-close').onclick = () => { $('result').hidden = true; };
     $('controls-close').onclick = () => this.toggle('controls', false);
     $('controls-reset').onclick = () => { game.input.reset(); this.renderControls(); };
@@ -164,8 +165,11 @@ export class Hud {
       $('dash').classList.toggle('off', now < local.nextRoll);
       $('parry').classList.toggle('off', now < local.parryReadyAt && !local.parrying);
       // Снаряжение из-под камня: способность с перезарядкой и оберег.
-      const ability = ABILITIES[me.ability], charm = CHARMS[me.charm];
-      $('gear').hidden = !ability && !charm;
+      const ability = ABILITIES[me.ability], magic = MAGIC[me.magic], charm = CHARMS[me.charm];
+      $('gear').hidden = !ability && !magic && !charm;
+      const magicCooldown = me.magicCooldown ?? 0;
+      $('gear-magic').textContent = magic ? `${keyName(input.bindings.magic[0])} — ${magic.name}${magicCooldown > 0 ? `: ${Math.ceil(magicCooldown)} с` : ''}` : '';
+      $('gear-magic').classList.toggle('off', magicCooldown > 0);
       const cooldown = me.abilityCooldown ?? 0;
       $('gear-ability').textContent = ability ? `${keyName(input.bindings.ability[0])} — ${ability.name}${cooldown > 0 ? `: ${Math.ceil(cooldown)} с` : ''}` : '';
       $('gear-ability').classList.toggle('off', cooldown > 0);
@@ -222,8 +226,8 @@ export class Hud {
     const k = (action) => keyName(game.input.bindings[action][0]);
     const move = ['up', 'left', 'down', 'right'].map(k).join('');
     $('hint').textContent = onMap
-      ? (game.session.stoneOpen ? `Выбери сложность и снаряжение     ${k('back')} — отойти` : `${move} — бежать избушкой     ${k('interact')} — в бой у логова     ${k('back')} — отойти от карты`)
-      : `${k('light')}/${k('heavy')} — атаки   ${k('card')} — карта   ${k('dash')} — перекат   ${k('parry')} — парирование   ${k('ability')} — магия   ${k('interact')} — действие   ${k('help')} — управление   ${k('debug')} — отладка`;
+      ? (game.session.stoneOpen ? `1 / 2 — выбрать сложность     ${k('back')} — отойти` : `${move} — бежать избушкой     ${k('interact')} — в бой у логова     ${k('back')} — отойти от карты`)
+      : `${k('light')}/${k('heavy')} — атаки   ${k('card')} — карта   ${k('dash')} — перекат   ${k('parry')} — парирование   ${k('ability')} — способность   ${k('magic')} — магия   ${k('interact')} — действие   ${k('help')} — управление   ${k('debug')} — отладка`;
   }
 
   updateMap(onMap) {
@@ -237,45 +241,57 @@ export class Hud {
       }).join('') + `<div class="small">Очки прокачки: ${session.points ?? 0}<br>Монеты: ${session.coins ?? 0}</div>`;
     }
 
-    // Камень на распутье: сложность и по три на выбор — оружие, бытовая магия, оберег, проклятия.
+    // Камень у логова: выбор сложности.
+    const stoneOpen = onMap && session.stoneOpen && session.stoneBoss >= 0;
+    $('stone').hidden = !stoneOpen;
+    if (!stoneOpen) this.stoneKey = '';
+    else {
+      const key = `${session.stoneBoss}:${session.results[session.stoneBoss]}:${session.ranks?.[session.stoneBoss]}`;
+      if (key !== this.stoneKey) {
+        this.stoneKey = key;
+        const boss = BOSSES[session.stoneBoss], best = session.results[session.stoneBoss], rank = session.ranks?.[session.stoneBoss] ?? -1;
+        $('stone-title').textContent = boss.name;
+        $('stone-description').textContent = `${boss.description}${rank >= 0 ? `${boss.description ? '. ' : ''}Лучший рейтинг: ${RANKS[rank].name}` : ''}`;
+        $('stone-difficulty').innerHTML = DIFFICULTIES.map((d, i) =>
+          `<button class="choice" data-d="${i}"><b>${i + 1}. ${d.name}${best >= i ? ' ✓' : ''}</b>${d.description}</button>`).join('');
+        for (const button of $('stone-difficulty').children) button.onclick = () => game.send({ t: 'difficulty', d: Number(button.dataset.d) });
+      }
+    }
+
+    // На локации босса, до начала боя: по три на выбор — оружие, бытовая магия, оберег, проклятия.
     const offer = session?.offer;
-    const open = onMap && session.stoneOpen && session.stoneBoss >= 0 && offer;
-    $('stone').hidden = !open;
-    if (!open) { this.stoneKey = ''; this.pick = null; return; }
-    const key = `${session.stoneBoss}:${JSON.stringify(offer)}`;
-    if (key === this.stoneKey) return;
-    this.stoneKey = key;
-    this.pick = { d: 0, weapon: offer.weapons[0], ability: offer.abilities[0] ?? null, charm: offer.charms[0] ?? null, curses: new Set() };
-    const boss = BOSSES[session.stoneBoss];
-    $('stone-title').textContent = boss.name;
-    $('stone-description').textContent = boss.description;
-    this.renderStone();
+    const choosing = session?.state === SESSION.ARENA && session.preparing && offer;
+    $('loadout').hidden = !choosing;
+    if (!choosing) { this.loadoutKey = ''; this.pick = null; return; }
+    const key = JSON.stringify(offer);
+    if (key === this.loadoutKey) return;
+    this.loadoutKey = key;
+    this.pick = { weapon: offer.weapons[0], ability: offer.abilities[0] ?? null, magic: offer.magic[0] ?? null, charm: offer.charms[0] ?? null, curses: new Set() };
+    $('loadout-title').textContent = `${BOSSES[session.boss]?.name ?? ''} — ${DIFFICULTIES[session.difficulty]?.name ?? ''}: снаряжение`;
+    this.renderLoadout();
   }
 
-  renderStone() {
-    const session = this.game.session, offer = session.offer, pick = this.pick;
-    const best = session.results[session.stoneBoss], rank = session.ranks?.[session.stoneBoss] ?? -1;
+  renderLoadout() {
+    const offer = this.game.session.offer, pick = this.pick;
     const card = (cls, picked, data, name, text) =>
       `<button class="choice ${cls}${picked ? ' picked' : ''}" ${data}><b>${name}</b>${text}</button>`;
-    $('stone-difficulty').innerHTML = DIFFICULTIES.map((d, i) =>
-      card('', pick.d === i, `data-d="${i}"`, `${d.name}${best >= i ? ' ✓' : ''}`, d.description)).join('');
-    $('stone-weapons').innerHTML = offer.weapons.map((w) =>
+    $('loadout-weapons').innerHTML = offer.weapons.map((w) =>
       card('', pick.weapon === w, `data-weapon="${w}"`, WEAPONS[w].name, WEAPONS[w].light[0].projectile ? 'Дальний бой' : 'Ближний бой')).join('');
-    $('stone-abilities').innerHTML = offer.abilities.map((a) => card('', pick.ability === a, `data-ability="${a}"`, ABILITIES[a].name, ABILITIES[a].description)).join('');
-    $('stone-charms').innerHTML = offer.charms.map((c) => card('', pick.charm === c, `data-charm="${c}"`, CHARMS[c].name, CHARMS[c].description)).join('');
-    $('stone-curses').innerHTML = offer.curses.map((c) => card('curse', pick.curses.has(c), `data-curse="${c}"`, CURSES[c].name, CURSES[c].description)).join('');
+    $('loadout-abilities').innerHTML = offer.abilities.map((a) => card('', pick.ability === a, `data-ability="${a}"`, ABILITIES[a].name, ABILITIES[a].description)).join('');
+    $('loadout-magic').innerHTML = offer.magic.map((a) => card('', pick.magic === a, `data-magic="${a}"`, MAGIC[a].name, MAGIC[a].description)).join('');
+    $('loadout-charms').innerHTML = offer.charms.map((c) => card('', pick.charm === c, `data-charm="${c}"`, CHARMS[c].name, CHARMS[c].description)).join('');
+    $('loadout-curses').innerHTML = offer.curses.map((c) => card('curse', pick.curses.has(c), `data-curse="${c}"`, CURSES[c].name, CURSES[c].description)).join('');
     const n = pick.curses.size;
-    const bestText = rank >= 0 ? `Лучший рейтинг: ${RANKS[rank].name}. ` : '';
-    $('stone-summary').textContent = `${bestText}${n ? `Проклятий: ${n}. Засчитаются за рейтинг: D — 1, C и B — до 2, A и выше — до 3.` : 'Без проклятий.'}`;
+    $('loadout-summary').textContent = n ? `Проклятий: ${n}. Засчитаются за рейтинг: D — 1, C и B — до 2, A и выше — до 3.` : 'Без проклятий.';
 
-    for (const button of document.querySelectorAll('#stone .choice')) button.onclick = () => {
+    for (const button of document.querySelectorAll('#loadout .choice')) button.onclick = () => {
       const d = button.dataset;
-      if (d.d !== undefined) pick.d = Number(d.d);
       if (d.weapon !== undefined) pick.weapon = Number(d.weapon);
       if (d.ability) pick.ability = d.ability;
+      if (d.magic) pick.magic = d.magic;
       if (d.charm) pick.charm = d.charm;
       if (d.curse) { if (pick.curses.has(d.curse)) pick.curses.delete(d.curse); else pick.curses.add(d.curse); }
-      this.renderStone();
+      this.renderLoadout();
     };
   }
 }
