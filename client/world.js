@@ -241,19 +241,33 @@ function addForestProps(game, add) {
   const { view } = game;
   const scene = SCENES.forest;
   const me = game.local;
-  for (const t of scene.trees) add(t.z - 0.1, () => {
+  const burnt = new Set(game.latest?.burnt ?? []);
+  scene.trees.forEach((t, i) => add(t.z - 0.1, () => {
     // Дерево перед богатырём (ближе к камере) просвечивает, чтобы его было видно.
     const front = me && t.z < me.z && me.z - t.z < 7 && Math.abs(t.x - me.x) < t.crownW / 2 + 0.8;
+    const charred = burnt.has(i);
     view.ctx.globalAlpha = front ? 0.4 : 1;
-    view.cylinder(t.x, t.z, t.r, t.height, t.hide ? '#3d2c1e' : '#382819');
-    view.blob(t.x, t.z, t.crownY, t.crownW, t.crownH, t.crownW, t.hide ? '#1d3a1f' : '#1a301a', 0.95);
+    view.cylinder(t.x, t.z, t.r, t.height, charred ? '#16120f' : t.hide ? '#3d2c1e' : '#382819');
+    view.blob(t.x, t.z, t.crownY, t.crownW, t.crownH, t.crownW, charred ? '#1e1b18' : t.hide ? '#1d3a1f' : '#1a301a', 0.95);
+    if (charred) drawEmbers(view, t, i, game.now);
     view.ctx.globalAlpha = 1;
-  });
+  }));
   const cut = new Set(game.latest?.cut ?? []);
   scene.bushes.forEach((b, i) => {
     if (cut.has(i)) add(b.z + 0.2, () => drawStubble(view, b.x, b.z));
     else add(b.z - 0.3, () => drawBush(view, b.x, b.z));
   });
+}
+
+/** Тлеющие угольки на обгоревшем стволе. */
+function drawEmbers(view, t, index, now) {
+  const ctx = view.ctx;
+  for (let k = 0; k < 5; k++) {
+    const glow = 0.35 + 0.35 * Math.sin(now * (1.3 + k * 0.4) + index + k * 2);
+    const [px, py] = view.project(t.x + Math.sin(k * 2.4) * t.r * 0.7, t.z - t.r, 0.4 + k * t.height * 0.13);
+    ctx.fillStyle = `rgba(255,${110 + k * 15},40,${Math.max(0, glow)})`;
+    ctx.fillRect(px - view.s * 0.03, py - view.s * 0.03, view.s * 0.06, view.s * 0.06);
+  }
 }
 
 /** Что осталось от срезанного или сгоревшего куста. */

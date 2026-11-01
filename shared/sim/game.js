@@ -35,9 +35,10 @@ export class Game {
     this.loadout = null;
     this.preparing = false;
     this.curses = new Set();
-    /** Следы бытовой магии на земле (соль, горох, угли) и срезанные кусты. */
+    /** Следы бытовой магии на земле (соль, горох, угли), срезанные кусты и обгоревшие деревья. */
     this.effects = [];
     this.cutBushes = new Set();
+    this.burntTrees = new Set();
     this.stats = null;
     this.boss = null;
     this.hazards = [];
@@ -303,9 +304,11 @@ export class Game {
         if (game.state !== SESSION.ARENA || !game.boss) return;
         game.flash(x, z, spell.radius);
         game.shake(0.25, 0.3);
-        for (const i of game.bushesIn(x, z, spell.radius + 0.4)) game.cutBush(i, 0);
-        // От молнии укрытие не спасает.
-        if (Math.hypot(game.boss.x - x, game.boss.z - z) < spell.radius + (game.boss.radius ?? 0.5)) {
+        // От молнии укрытие не спасает. Если попала только в край куста — сидящему в нём достанется от огня.
+        const struck = Math.hypot(game.boss.x - x, game.boss.z - z) < spell.radius + (game.boss.radius ?? 0.5);
+        for (const i of game.bushesTouching(x, z, spell.radius)) game.cutBush(i, struck ? 0 : spell.damage);
+        game.burnTrees(x, z, spell.radius);
+        if (struck) {
           const strike = () => game.damageBoss(player, spell.damage, false);
           if (game.boss.throughCover) game.boss.throughCover(strike); else strike();
         }
@@ -348,7 +351,10 @@ export class Game {
       if (game.state !== SESSION.ARENA) return;
       game.effects.push({ id: game.nextId++, kind: id, x, z, r: a.radius, owner: player, born: game.clock.now,
         expire: game.clock.now + a.duration, nextTick: game.clock.now });
-      if (id === 'coals') for (const i of game.bushesIn(x, z, a.radius + 0.4)) game.cutBush(i, a.damage * 2);
+      if (id === 'coals') {
+        for (const i of game.bushesTouching(x, z, a.radius)) game.cutBush(i, a.damage * 2);
+        game.burnTrees(x, z, a.radius);
+      }
       game.boss?.onAbility?.(id, x, z);
     })(this));
   }
@@ -362,9 +368,16 @@ export class Game {
     return best;
   }
 
-  bushesIn(x, z, r) {
-    return (this.sceneData.bushes ?? []).map((b, i) => i).filter((i) => !this.cutBushes.has(i)
-      && Math.hypot(this.sceneData.bushes[i].x - x, this.sceneData.bushes[i].z - z) <= r);
+  /** Кусты, которых касается круг радиуса r. */
+  bushesTouching(x, z, r) {
+    const { bushes = [], bushRadius = 0 } = this.sceneData;
+    return bushes.map((b, i) => i).filter((i) => !this.cutBushes.has(i)
+      && Math.hypot(bushes[i].x - x, bushes[i].z - z) <= r + bushRadius);
+  }
+
+  /** Деревья, которых коснулся огонь или молния, обгорают: стоят и прячут как прежде, только чёрные. */
+  burnTrees(x, z, r) {
+    (this.sceneData.trees ?? []).forEach((t, i) => { if (Math.hypot(t.x - x, t.z - z) <= r + t.r) this.burntTrees.add(i); });
   }
 
   /** Куст срезан или сгорел — до конца боя. Если в нём сидело Лихо — получает урон и выскакивает. */
@@ -446,6 +459,7 @@ export class Game {
     this.decoy = null;
     this.effects = [];
     this.cutBushes = new Set();
+    this.burntTrees = new Set();
     this.curses = new Set();
     this.mapInput.clear();
     this.fightResolved = false;
@@ -690,6 +704,7 @@ export class Game {
       })),
       effects: this.effects.map((e) => ({ id: e.id, kind: e.kind, x: r2(e.x), z: r2(e.z), r: e.r, left: r2(e.expire - now) })),
       cut: [...this.cutBushes],
+      burnt: [...this.burntTrees],
       decoy: this.activeDecoy() ? { x: r2(this.decoy.x), z: r2(this.decoy.z), owner: this.decoy.owner, left: r2(this.decoy.expire - now) } : null,
       boss: this.boss?.snapshot() ?? null,
       hazards: this.hazards.map((h) => h.type === 'proj'

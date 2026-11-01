@@ -88,6 +88,8 @@ function forest() {
     spawns: [[-1.5, -9], [1.5, -9]], bossSpawn: { x: 0, z: 6, fx: 0, fz: -1 },
     obstacles: trees.map((t) => circle(t.x, t.z, t.r, { tree: true })),
     trees, bushes, hidePoints,
+    /** Примерный радиус куста на рисунке: огонь и молния жгут куст, когда его касаются. */
+    bushRadius: 1.4,
     interactables: [{ id: 'exit', kind: 'exit', x: 0, z: -14.2, radius: 2.2, prompt: 'Сбежать к избушке' }],
     ground: { r: 17, color: '#2b3a21' },
     light: { ambient: 0.42, tint: 'rgba(40,70,120,0.18)' },
