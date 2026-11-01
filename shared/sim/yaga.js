@@ -105,7 +105,7 @@ export class Yaga {
     if (this.dead || this.cutscene) return;
     if (this.gateStrikeAt && now >= this.gateStrikeAt) {
       this.gateStrikeAt = 0;
-      game.spawnZone(gate.x, gate.z, P.gateRadius, 'strike', 0.15, P.gateDamage);
+      game.spawnZone(gate.x, gate.z, P.gateRadius, 'strike', 0.15, P.gateDamage, 0, 'claws');
     }
     if (now < this.nextGateAt) return;
     this.nextGateAt = now + P.gateEvery;
@@ -123,7 +123,7 @@ export class Yaga {
       airborne: this.airborne, onRoof: this.onRoof, cutscene: this.cutscene,
       finisherReady: this.finisherReady, finisherLabel: 'Сказать заветные слова',
       claws: this.claws.active ? { token: this.claws.token, damage: this.claws.damage } : null,
-      contact: 0, fenceR: P.fenceRadius,
+      contact: 0, fenceR: P.fenceRadius, gateBite: this.gateStrikeAt > 0, stoveLit: this.phase === 3,
       hut: { x: r2(h.x), z: r2(h.z), active: h.active, fallen: h.fallen, seated: h.seated, moving: h.moving,
         turned: h.turnedUntil > this.now, charging: h.charging, token: h.token, legHits: h.legHits, r: P.hutRadius },
       phaseMarks: [2 / 3, 1 / 3],
@@ -311,7 +311,7 @@ export class Yaga {
     this.game.telegraphCircle(target.x, target.z, 1.6, this.tele(0.45), 'danger');
     const x = target.x, z = target.z;
     yield* this.wait(this.tele(0.45));
-    this.game.spawnZone(x, z, 1.6, 'strike', 0.15, P.sniffDamage);
+    this.game.spawnZone(x, z, 1.6, 'strike', 0.15, P.sniffDamage, 0, 'dust');
   }
 
   // ---------------------------------------------------------------- Фаза 2: избушка
@@ -372,7 +372,7 @@ export class Yaga {
       const x = target.x, z = target.z;
       this.game.telegraphCircle(x, z, P.stompRadius, this.tele(0.75), 'danger');
       yield* this.wait(this.tele(0.75));
-      this.game.spawnZone(x, z, P.stompRadius, 'strike', 0.15, P.stompDamage);
+      this.game.spawnZone(x, z, P.stompRadius, 'strike', 0.15, P.stompDamage, 0, 'ring');
       this.game.shake(0.3, 0.25);
     }
   }

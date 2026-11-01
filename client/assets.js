@@ -32,6 +32,14 @@ export const ALL_IMAGES = [
     .map((n) => `characters/likho/${n}.png`),
   'characters/Healer.png', 'characters/Smith.png',
   ...['Sword', 'Axe', 'Mace', 'Bow', 'Crossbow'].map((n) => `weapons/${n}.png`),
+  ...['ground', 'oak1', 'oak2', 'oak1_burnt', 'oak2_burnt', 'tree1', 'tree2', 'bush1', 'bush2', 'bush_cut', 'bush_burnt', 'fern', 'mushrooms', 'stone', 'leaves', 'root', 'exit']
+    .map((n) => `forest/${n}.png`),
+  ...['trap_a_open', 'trap_a_closed', 'trap_a_fly', 'trap_b_open', 'trap_b_closed', 'trap_c_open', 'trap_c_closed', 'trap_c_fly', 'throw_clod', 'throw_stone', 'throw_bone',
+    'branch1', 'branch2', 'branch3', 'fx_claws', 'fx_dust', 'fx_ring', 'fx_stars'].map((n) => `likho/${n}.png`),
+  ...['ground', 'head', 'torso', 'arm_front', 'arm_back', 'stupa', 'broom', 'shovel', 'hut_idle', 'hut_front', 'hut_back', 'hut_door_open', 'hut_fallen', 'leg_thigh', 'leg_shin', 'leg_foot',
+    'fence', 'skull_lit', 'gate_closed', 'gate_bite', 'stove', 'stove_fire', 'goose1', 'goose2', 'bone', 'fx_dust', 'fx_fire'].map((n) => `yaga/${n}.png`),
+  ...['white', 'red', 'black'].flatMap((n) => ['body', 'back', 'front', 'rider'].map((part) => `yaga/rider_${n}_${part}.png`)),
+  'items/pot_fly.png', 'items/pouch_fly.png', 'items/ability/comb.png', 'items/ability/towel.png', 'items/ability/bread.png',
 ];
 
 // ---------------------------------------------------------------- Звук

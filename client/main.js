@@ -100,7 +100,9 @@ class Game {
       case 'teleport': this.local.teleport(m.x, m.z, m.fx, m.fz); this.view.snap(m.x, m.z); break;
       case 'announce': this.hud.announce(m.text); break;
       case 'shake': this.view.shake(m.amount, m.duration, this.now); break;
-      case 'flash': this.vfx.flash(m.x, m.z, m.r); break;
+      case 'flash': this.vfx.flash(m.x, m.z, m.r, m.look); break;
+      case 'trapThrow': this.vfx.trapThrow(m); break;
+      case 'trapSnap': this.vfx.trapSnap(m.x, m.z, m.variant); break;
       case 'text': this.vfx.text(m.x, m.z, m.y, m.text, m.color, m.duration); break;
       case 'damage':
         this.vfx.damage(m.x, m.z, m.amount);

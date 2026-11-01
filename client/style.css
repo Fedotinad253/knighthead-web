@@ -98,6 +98,7 @@ canvas#game { position: fixed; inset: 0; width: 100vw; height: 100vh; display: b
 .gear-line.off { opacity: 0.45; }
 #boss-curses { color: #d9a3ff; text-shadow: 0 1px 3px #000; }
 #result { text-align: center; width: min(520px, 94vw); }
+.coin { width: 18px; height: 18px; object-fit: contain; vertical-align: -4px; }
 #result-title { font-size: 26px; color: var(--gold); font-weight: 700; margin-top: 6px; }
 #result-rank { font-size: 84px; font-weight: 800; line-height: 1.05; text-shadow: 0 4px 16px #000; }
 #result-table { width: 100%; border-collapse: collapse; margin: 6px 0 10px; font-size: 15px; }

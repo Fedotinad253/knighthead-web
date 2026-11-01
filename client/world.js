@@ -4,7 +4,7 @@ import { WEAPONS, WORLDS, BOSSES } from '../shared/data.js';
 import { SCENES } from '../shared/scenes.js';
 import { assets } from './assets.js';
 import { shade, SIN, ORB_LIFT, ORB_RADIUS } from './view.js';
-import { drawClearingProps, drawYaga, drawHut, drawWideProjectile, drawFireZone } from './yagaview.js';
+import { drawClearingProps, drawYaga, drawHut, drawWideProjectile, drawFireZone, drawFlat, drawStars, drawGroundTile } from './yagaview.js';
 import { bogatyrPose } from './rig.js';
 import { drawParryRing } from './vfx.js';
 import { keyName } from './input.js';
@@ -63,7 +63,7 @@ export function drawWorld(game) {
     // Яга на крыше рисуется поверх избушки.
     add(b.onRoof ? b.hut.z - 0.5 : b.z + (hidden ? 0.6 : 0), () => (b.kind === 'yaga' ? drawYaga(game, b) : drawBoss(game, b)));
   }
-  for (const h of game.liveHazards()) if (h.type === 'proj') add(h.z, () => (h.wide || h.look ? drawWideProjectile(view, h, game.now) : drawOrb(view, h, game.now)));
+  for (const h of game.liveHazards()) if (h.type === 'proj') add(h.z, () => (h.wide || h.look ? drawWideProjectile(view, h, game.now, game.local) : drawOrb(view, h, game.now)));
   for (const a of game.liveArrows()) add(a.z, () => drawArrow(view, a));
 
   drawables.sort((a, b) => b.key - a.key);
@@ -154,6 +154,8 @@ function drawRoundGround(view, scene, game) {
   const color = scene.id === 'arena' ? (WORLDS[BOSSES[game.session?.boss]?.world ?? 0]?.ground ?? scene.ground.color) : scene.ground.color;
   view.groundEllipse(0, 0, scene.ground.r + 6, scene.ground.r + 6, shade(color, 0.55));
   view.groundEllipse(0, 0, scene.ground.r, scene.ground.r, color);
+  // Лес и поляна — земля из рисунка.
+  if (scene.groundTile && drawGroundTile(view, scene.groundTile, scene.ground.r, scene.groundMeters)) return;
   // Пятна травы — чтобы земля не была пустой (одинаковые у всех: от координат).
   for (let i = 0; i < 70; i++) {
     const a = i * 2.399, d = Math.sqrt(i / 70) * scene.ground.r * 0.95;
@@ -254,54 +256,26 @@ function addForestProps(game, add) {
   const burnt = new Set(game.latest?.burnt ?? []);
   scene.trees.forEach((t, i) => add(t.z - 0.1, () => {
     // Дерево перед богатырём (ближе к камере) просвечивает, чтобы его было видно.
-    const front = me && t.z < me.z && me.z - t.z < 7 && Math.abs(t.x - me.x) < t.crownW / 2 + 0.8;
-    const charred = burnt.has(i);
+    const front = me && t.z < me.z && me.z - t.z < (t.hide ? 7 : 11) && Math.abs(t.x - me.x) < (t.hide ? 3 : 2.4);
     view.ctx.globalAlpha = front ? 0.4 : 1;
-    view.cylinder(t.x, t.z, t.r, t.height, charred ? '#16120f' : t.hide ? '#3d2c1e' : '#382819');
-    view.blob(t.x, t.z, t.crownY, t.crownW, t.crownH, t.crownW, charred ? '#1e1b18' : t.hide ? '#1d3a1f' : '#1a301a', 0.95);
-    if (charred) drawEmbers(view, t, i, game.now);
+    const art = t.hide ? `oak${i % 2 + 1}` : `tree${i % 2 + 1}`;
+    drawSprite(view, `forest/${art}${t.hide && burnt.has(i) ? '_burnt' : ''}.png`, t.x, t.z, t.hide ? 5.6 * t.size : 6.5 * t.size, i % 3 === 0);
     view.ctx.globalAlpha = 1;
   }));
-  const cut = new Set(game.latest?.cut ?? []);
+  for (const d of DECOR) add(d.z + 0.3, () => drawSprite(view, `forest/${d.art}.png`, d.x, d.z, d.h, d.flip));
+  const cut = new Set(game.latest?.cut ?? []), burntBushes = new Set(game.latest?.burntBushes ?? []);
   scene.bushes.forEach((b, i) => {
-    if (cut.has(i)) add(b.z + 0.2, () => drawStubble(view, b.x, b.z));
-    else add(b.z - 0.3, () => drawBush(view, b.x, b.z));
+    if (burntBushes.has(i)) add(b.z + 0.2, () => drawSprite(view, 'forest/bush_burnt.png', b.x, b.z, 1.2, i % 2 === 0));
+    else if (cut.has(i)) add(b.z + 0.2, () => drawSprite(view, 'forest/bush_cut.png', b.x, b.z, 1.3, i % 2 === 0));
+    else add(b.z - 0.3, () => drawSprite(view, `forest/bush${i % 2 + 1}.png`, b.x, b.z, 2.8, i % 3 === 0));
   });
 }
 
-/** Тлеющие угольки на обгоревшем стволе. */
-function drawEmbers(view, t, index, now) {
-  const ctx = view.ctx;
-  for (let k = 0; k < 5; k++) {
-    const glow = 0.35 + 0.35 * Math.sin(now * (1.3 + k * 0.4) + index + k * 2);
-    const [px, py] = view.project(t.x + Math.sin(k * 2.4) * t.r * 0.7, t.z - t.r, 0.4 + k * t.height * 0.13);
-    ctx.fillStyle = `rgba(255,${110 + k * 15},40,${Math.max(0, glow)})`;
-    ctx.fillRect(px - view.s * 0.03, py - view.s * 0.03, view.s * 0.06, view.s * 0.06);
-  }
-}
-
-/** Что осталось от срезанного или сгоревшего куста. */
-function drawStubble(view, x, z) {
-  view.groundEllipse(x, z, 1.1, 0.9, 'rgba(25,20,12,0.55)');
-  const ctx = view.ctx;
-  ctx.strokeStyle = '#5a4a2a';
-  ctx.lineWidth = Math.max(1.5, view.s * 0.05);
-  for (let i = 0; i < 7; i++) {
-    const a = i * 2.4, r = 0.25 + (i % 3) * 0.2;
-    const [px, py] = view.project(x + Math.sin(a) * r, z + Math.cos(a) * r);
-    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + view.s * 0.03, py - view.s * 0.22); ctx.stroke();
-  }
-}
-
-/** Куст в рост сложившегося пополам Лиха (~1.7 м) — три шара листвы. */
-function drawBush(view, x, z) {
-  const s = [1.5, 1.8, 1.5];
-  const parts = [[-0.5, 0.3, -0.3, 1.1, 0.7, 1, 0.9], [0, 0.45, 0, 1.8, 1, 1.6, 1], [0.6, 0.35, 0.3, 1.2, 0.8, 1.1, 1.15]];
-  // Сначала дальние шары.
-  parts.sort((a, b) => b[2] - a[2]);
-  for (const [ox, oy, oz, w, h, d, light] of parts)
-    view.blob(x + ox * s[0], z + oz * s[2], oy * s[1], w * s[0], h * s[1], d * s[2], '#24501d', light);
-}
+/** Мелочи на земле леса: только для вида, не мешают ходить. */
+const DECOR = [
+  ['fern', -5.5, -6.5, 1.2], ['mushrooms', 3.2, -6, 0.9], ['stone', 8, -9.5, 1.1], ['leaves', -3, 3, 0.7], ['root', 4, 1.5, 0.9], ['fern', 11, 7.5, 1.3],
+  ['mushrooms', -12.5, 1.5, 0.8], ['stone', -8.5, -10, 0.9], ['leaves', 6, 11.5, 0.7], ['fern', -6, 11.5, 1.2], ['root', -9.5, 0.5, 0.8], ['leaves', 12, -2, 0.6],
+].map(([art, x, z, h], i) => ({ art, x, z, h, flip: i % 2 === 0 }));
 
 // ---------------------------------------------------------------- Арена
 
@@ -316,6 +290,7 @@ function addArenaProps(game, add) {
 function drawExit(view, item, now) {
   const pulse = 0.5 + Math.sin(now * 3) * 0.15;
   view.groundEllipse(item.x, item.z, 1.3, 1.3, `rgba(255,190,100,${0.25 * pulse + 0.1})`, 'rgba(255,190,100,0.8)', 0.06);
+  drawSprite(view, 'forest/exit.png', item.x, item.z + 0.4, 2.2);
 }
 
 // ---------------------------------------------------------------- Персонажи
@@ -347,7 +322,7 @@ function drawPlayer(game, p) {
     overlay: flash ? '#ffffff' : (blink || p.downed) ? '#000000' : null,
     overlayAlpha: flash ? 0.7 : blink ? 0.45 : p.downed ? 0.35 : 0,
   });
-  if (p.anim?.stun) view.label(p.x, p.z, 2.5, '✦ ✦', '#ffb34d', 0.4);
+  if (p.anim?.stun) drawStars(view, p.x, p.z, 2.4, game.now);
 }
 
 function drawDroppedWeapon(view, p) {
@@ -373,6 +348,7 @@ function drawBoss(game, b) {
     if (!hiddenInBush) view.groundEllipse(b.x, b.z, 0.9, 0.7, 'rgba(0,0,0,0.35)');
     const base = b.rig.base(view, b.x, b.z, { flip: b.flip });
     b.rig.draw(ctx, base, { overlay: flash ? '#ffffff' : null, overlayAlpha: flash ? 0.6 : 0 });
+    if (b.pose === 'Stunned') drawStars(view, b.x, b.z, 3.2, game.now);
     // Горящий глаз светит в ночном лесу.
     const glow = b.eyeBlind ? 0 : b.animator.glow;
     if (glow > 0.35 && b.rig.get('eye').visible !== false) {
@@ -469,6 +445,10 @@ function drawEffect(view, e, now) {
       const a = i * 2.39996 + now * 0.2, r = e.r * Math.sqrt((i + 0.5) / 9) * 0.85;
       view.groundEllipse(e.x + Math.sin(a) * r, e.z + Math.cos(a) * r, e.r * 0.55, e.r * 0.55, `rgba(150,135,95,${0.75 * fade})`);
     }
+    const [dx, dy] = view.project(e.x, e.z, 0.4);
+    ctx.globalAlpha = fade;
+    drawFlat(view, 'yaga/fx_dust.png', dx, dy, e.r * 2.6, 0, e.id % 2 === 0);
+    ctx.globalAlpha = 1;
   } else if (e.kind === 'comb') {
     for (let i = 0; i < 14; i++) {
       const a = i * Math.PI * 2 / 14, x = e.x + Math.sin(a) * e.r, z = e.z + Math.cos(a) * e.r;
@@ -519,18 +499,10 @@ function drawCataract(game) {
   ctx.fillRect(0, 0, view.w, view.h);
 }
 
-/** Капкан: тёмное железное кольцо с зубьями. */
+/** Капкан лежит на земле. Вид задан при броске. */
 function drawTrap(view, h) {
-  view.groundEllipse(h.x, h.z, h.r, h.r, 'rgba(30,25,22,0.55)', '#4a423b', 0.08);
-  const ctx = view.ctx;
-  for (let i = 0; i < 10; i++) {
-    const a = i * Math.PI * 2 / 10;
-    const [px, py] = view.project(h.x + Math.sin(a) * h.r * 0.8, h.z + Math.cos(a) * h.r * 0.8);
-    ctx.fillStyle = '#8a8178';
-    ctx.beginPath();
-    ctx.moveTo(px - view.s * 0.06, py); ctx.lineTo(px, py - view.s * 0.22); ctx.lineTo(px + view.s * 0.06, py);
-    ctx.fill();
-  }
+  const [px, py] = view.project(h.x, h.z);
+  drawFlat(view, `likho/trap_${h.look ?? 'a'}_open.png`, px, py, 2.3);
 }
 
 /** Мягкая тень у ног — без чёткого края, чтобы не выглядела кружком. */

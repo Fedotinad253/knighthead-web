@@ -128,7 +128,7 @@ export class Hud {
     const curses = m.curses ? `, за проклятия ${m.cursePoints} из ${m.curses}` : '';
     $('result-rewards').innerHTML = [
       `Очки прокачки: <b>+${m.gained}</b> <span class="small dim">(за рейтинг ${m.rankPoints}${curses}; по каждому боссу считается лучший бой)</span>`,
-      `Монеты от трактирщика: <b>+${m.coinsGained}</b>`,
+      `<img class="coin" src="${iconUrl('items/coin.png')}" alt=""> Монеты от трактирщика: <b>+${m.coinsGained}</b>`,
       `<span class="small dim">Всего: очков ${m.points}, монет ${m.coins}</span>`,
       m.firstStar ? '<b style="color:#ffcf3a">★ Звёздочка на карте!</b>' : '',
     ].filter(Boolean).join('<br>');
@@ -253,7 +253,7 @@ export class Hud {
         let defeated = 0, total = 0;
         BOSSES.forEach((b, k) => { if (b.world === i) { total++; if (session.results[k] >= 0) defeated++; } });
         return `<div style="color:${open ? w.color : '#8c8080'}">${w.name}: ${open ? `${defeated}/${total}` : 'закрыто'}</div>`;
-      }).join('') + `<div class="small">Очки прокачки: ${session.points ?? 0}<br>Монеты: ${session.coins ?? 0}</div>`;
+      }).join('') + `<div class="small">Очки прокачки: ${session.points ?? 0}<br><img class="coin" src="${iconUrl('items/coin.png')}" alt=""> Монеты: ${session.coins ?? 0}</div>`;
     }
 
     // Камень у логова: выбор сложности.

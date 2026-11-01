@@ -1,6 +1,29 @@
 // Эффекты на земле и над головами: подсказки атак (красные круги и полосы, тень сука), вспышки ударов,
 // дуги взмахов, кольцо парирования, всплывающий текст и цифры урона.
 import { SIN } from './view.js';
+import { assets } from './assets.js';
+
+/** Что летит при броске и какие рисунки у капканов. */
+const TOSS_IMAGES = { salt: 'items/pouch_fly.png', coals: 'items/pot_fly.png', comb: 'items/ability/comb.png', towel: 'items/ability/towel.png', bread: 'items/ability/bread.png' };
+const TRAP_FLY = { a: 'likho/trap_a_fly.png', b: 'likho/trap_b_open.png', c: 'likho/trap_c_fly.png' };
+/** Как летит капкан: а — навесом с лёгким вращением, б — низко и плашмя, быстро крутясь, в — высоко, кувырком. */
+const TRAP_FLIGHT = { a: { arc: 2.6, turns: 0.6 }, b: { arc: 0.9, turns: 2.5 }, c: { arc: 4.2, turns: 2 } };
+const FLASH_IMAGES = { claws: 'likho/fx_claws.png', ring: 'likho/fx_ring.png', dust: 'likho/fx_dust.png', branch: 'likho/fx_dust.png' };
+const BRANCHES = ['likho/branch1.png', 'likho/branch2.png', 'likho/branch3.png'];
+
+/** Рисунок шириной width м с центром в (px, py), повёрнут на angle. */
+function drawCentered(view, path, px, py, width, angle = 0, alpha = 1, flip = false) {
+  const image = assets.image(path);
+  if (!image?.naturalWidth) return;
+  const ctx = view.ctx, w = width * view.s, h = w * image.naturalHeight / image.naturalWidth;
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  ctx.translate(px, py);
+  ctx.rotate(angle);
+  if (flip) ctx.scale(-1, 1);
+  ctx.drawImage(image, -w / 2, -h / 2, w, h);
+  ctx.restore();
+}
 
 export class Vfx {
   constructor(game) {
@@ -13,7 +36,11 @@ export class Vfx {
   add(item) { this.items.push({ born: this.now, ...item }); }
 
   telegraph(m) { this.add({ kind: 'tele', ...m, until: this.now + m.duration }); }
-  flash(x, z, r) { this.add({ kind: 'flash', x, z, r, until: this.now + 0.25 }); }
+  flash(x, z, r, look = null) { this.add({ kind: 'flash', x, z, r, look, until: this.now + (look ? 0.4 : 0.25) }); }
+  /** Лихо бросает капкан. */
+  trapThrow(m) { this.add({ kind: 'trapFly', ...m, until: this.now + m.duration }); }
+  /** Капкан захлопнулся: закрытый лежит ещё немного. */
+  trapSnap(x, z, variant) { this.add({ kind: 'trapClosed', x, z, variant, until: this.now + 1.4 }); }
   slash(x, z, dx, dz, range, arc, color) { this.add({ kind: 'slash', x, z, dx, dz, range, arc, color, until: this.now + 0.15 }); }
   parryFlash(x, z) { this.add({ kind: 'parry', x, z, until: this.now + 0.35 }); }
   text(x, z, y, text, color = '#fff', duration = 1.2) { this.add({ kind: 'text', x, z, y, text, color, until: this.now + duration, duration }); }
@@ -42,6 +69,9 @@ export class Vfx {
         } else {
           drawLine(view, i, t);
         }
+      } else if (i.kind === 'trapClosed') {
+        const [px, py] = view.project(i.x, i.z);
+        drawCentered(view, `likho/trap_${i.variant ?? 'a'}_closed.png`, px, py, 2.3, 0, Math.min(1, (1 - t) * 3));
       } else if (i.kind === 'flash') {
         view.groundEllipse(i.x, i.z, i.r, i.r, `rgba(255,230,180,${0.55 * (1 - t)})`);
       } else if (i.kind === 'slash') {
@@ -69,9 +99,22 @@ export class Vfx {
         ctx.fillStyle = g;
         ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
+      } else if (i.kind === 'flash' && FLASH_IMAGES[i.look]) {
+        const [px, py] = view.project(i.x, i.z, i.look === 'claws' ? 1 : 0.2);
+        drawCentered(view, FLASH_IMAGES[i.look], px, py, i.r * 2.3 * (0.85 + t * 0.25), 0, 1 - t * t);
+      } else if (i.kind === 'tele' && i.shape === 'circle' && i.color === 'shadow') {
+        // Сук падает с высоты в свою тень.
+        const [px, py] = view.project(i.x, i.z, (1 - t * t) * 10 + 0.4);
+        drawCentered(view, BRANCHES[(i.id ?? 0) % BRANCHES.length], px, py, 2.6, (1 - t) * 0.8);
+      } else if (i.kind === 'trapFly') {
+        const style = TRAP_FLIGHT[i.variant] ?? TRAP_FLIGHT.a;
+        const x = i.x0 + (i.x - i.x0) * t, z = i.z0 + (i.z - i.z0) * t;
+        const [px, py] = view.project(x, z, 0.5 + Math.sin(t * Math.PI) * style.arc);
+        drawCentered(view, TRAP_FLY[i.variant] ?? TRAP_FLY.a, px, py, i.variant === 'b' ? 2 : 2.4, t * style.turns * Math.PI * 2, 1, i.x < i.x0);
       } else if (i.kind === 'toss') {
         const x = i.x + (i.tx - i.x) * t, z = i.z + (i.tz - i.z) * t, y = 1.2 + Math.sin(t * Math.PI) * 2;
         const [px, py] = view.project(x, z, y);
+        if (TOSS_IMAGES[i.what]) { drawCentered(view, TOSS_IMAGES[i.what], px, py, 0.9, t * 6); continue; }
         ctx.fillStyle = TOSS_COLORS[i.what] ?? '#fff';
         ctx.strokeStyle = 'rgba(0,0,0,0.6)';
         ctx.lineWidth = Math.max(1, view.s * 0.03);

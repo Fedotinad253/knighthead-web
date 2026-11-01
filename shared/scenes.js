@@ -91,7 +91,7 @@ function forest() {
     /** Примерный радиус куста на рисунке: огонь и молния жгут куст, когда его касаются. */
     bushRadius: 1.4,
     interactables: [{ id: 'exit', kind: 'exit', x: 0, z: -14.2, radius: 2.2, prompt: 'Сбежать к избушке' }],
-    ground: { r: 17, color: '#2b3a21' },
+    ground: { r: 17, color: '#2b3a21' }, groundTile: 'forest/ground.png', groundMeters: 12,
     light: { ambient: 0.42, tint: 'rgba(40,70,120,0.18)' },
     lights: [[-6, -2], [5, 3], [-2, 8], [9, -8]].map(([x, z]) =>
       ({ x, z, y: 1.8, color: '150,255,130', radius: 5, intensity: 0.35, flicker: true })),
@@ -109,7 +109,7 @@ function clearing() {
     hutHome: { x: -7, z: 8.5 }, stove, gate: { x: 14.6, z: 0 },
     obstacles: [circle(stove.x, stove.z, 1.5)],
     interactables: [{ id: 'exit', kind: 'exit', x: 0, z: -14.2, radius: 2.2, prompt: 'Сбежать к избушке' }],
-    ground: { r: 17, color: '#3b3d24' },
+    ground: { r: 17, color: '#3b3d24' }, groundTile: 'yaga/ground.png', groundMeters: 12,
     light: { ambient: 0.62, tint: 'rgba(70,40,80,0.14)' },
     lights: [{ x: stove.x, z: stove.z - 1, y: 1.2, color: '255,150,70', radius: 5, intensity: 0.5, flicker: true },
       ...[45, 135, 225, 315].map((a) => ({ x: Math.sin(a * Math.PI / 180) * 14.8, z: Math.cos(a * Math.PI / 180) * 14.8, y: 1.8, color: '255,140,60', radius: 3.5, intensity: 0.35, flicker: true }))],

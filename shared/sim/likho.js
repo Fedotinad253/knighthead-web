@@ -26,6 +26,9 @@ const P = {
 
 /** Позы, в которых Лихо сидит в укрытии. */
 const HIDING = new Set(['Hidden', 'Peek', 'HiddenTree', 'PeekTree']);
+/** Что Лихо швыряет веером и какие капканы ставит. */
+const THROWN = ['throw_clod', 'throw_stone', 'throw_bone'];
+const TRAPS = ['a', 'b', 'c'];
 /** Позы, в которых Лихо открыто для ударов (для Медвежьего когтя). */
 const VULNERABLE = new Set(['Tired', 'Stunned', 'Exhausted']);
 /** Насколько медленнее Лихо на рассыпанном горохе. */
@@ -264,7 +267,7 @@ export class Likho {
     this.face(player.x - this.x, player.z - this.z);
     this.game.telegraphCircle(this.x, this.z, 2, this.tele(0.45), 'danger');
     yield* this.wait(this.tele(0.45), false);
-    this.game.spawnZone(this.x, this.z, 2, 'strike', 0.15, P.swipeDamage);
+    this.game.spawnZone(this.x, this.z, 2, 'strike', 0.15, P.swipeDamage, 0, 'claws');
     this.pose = 'Tired';
     yield* this.wait(this.window(P.flushedWindow));
   }
@@ -376,7 +379,7 @@ export class Likho {
     const cx = this.x + dx * 1.6, cz = this.z + dz * 1.6;
     this.game.telegraphCircle(cx, cz, 1.7, this.tele(P.swipeTelegraph), 'danger');
     yield* this.wait(this.tele(P.swipeTelegraph), false);
-    this.game.spawnZone(cx, cz, 1.7, 'strike', 0.15, P.swipeDamage);
+    this.game.spawnZone(cx, cz, 1.7, 'strike', 0.15, P.swipeDamage, 0, 'claws');
     this.nextSwipeAt = this.now + P.swipeCooldown / this.d.attackSpeed;
     this.pose = 'Tired';
     yield* this.wait(this.window(P.swipeRecovery));
@@ -397,7 +400,9 @@ export class Likho {
     const count = this.d.extra ? 5 : 3;
     for (let i = 0; i < count; i++) {
       const [fx, fz] = rotate(dx, dz, (i - (count - 1) / 2) * 14);
-      this.game.fireEnemy(this.x, this.z, fx, fz, P.throwSpeed * this.d.projectileSpeed, P.throwDamage, i === Math.floor(count / 2), 4);
+      // Швыряет что под руку попалось.
+      const look = THROWN[Math.floor(Math.random() * THROWN.length)];
+      this.game.fireEnemy(this.x, this.z, fx, fz, P.throwSpeed * this.d.projectileSpeed, P.throwDamage, i === Math.floor(count / 2), 4, null, look);
     }
     // Тяжело дышит — окно для ударов.
     this.pose = 'Tired';
@@ -416,9 +421,12 @@ export class Likho {
       spots.push(spot);
       this.game.telegraphCircle(spot[0], spot[1], 0.8, 0.5, 'danger');
     }
+    // Бросает капканы разных видов, каждый летит по-своему.
+    const variants = spots.map(() => TRAPS[Math.floor(Math.random() * TRAPS.length)]);
+    spots.forEach(([x, z], i) => this.game.broadcast({ t: 'trapThrow', variant: variants[i], x0: this.x, z0: this.z, x, z, duration: 0.5 }));
     yield* this.wait(0.5, false);
-    // Капкан: железное кольцо с зубьями, лежит 20 секунд или пока не наступят.
-    for (const [x, z] of spots) this.game.spawnZone(x, z, 0.8, 'trap', 20, P.trapDamage, P.trapStun);
+    // Капкан лежит 20 секунд или пока не наступят.
+    spots.forEach(([x, z], i) => this.game.spawnZone(x, z, 0.8, 'trap', 20, P.trapDamage, P.trapStun, variants[i]));
     yield* this.wait(0.4, false);
   }
 
@@ -595,7 +603,7 @@ export class Likho {
     this.pose = 'Flail';
     const hits = this.d.extra ? 4 : 3;
     for (let i = 0; i < hits && !this.dead; i++) {
-      this.game.spawnZone(this.x, this.z, P.flailRadius, 'strike', 0.15, P.flailDamage);
+      this.game.spawnZone(this.x, this.z, P.flailRadius, 'strike', 0.15, P.flailDamage, 0, 'ring');
       yield* this.wait(0.45, false);
     }
     this.pose = 'Tired';

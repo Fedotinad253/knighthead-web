@@ -36,9 +36,10 @@ export class Game {
     this.loadout = null;
     this.preparing = false;
     this.curses = new Set();
-    /** Следы бытовой магии на земле (соль, горох, угли), срезанные кусты и обгоревшие деревья. */
+    /** Следы бытовой магии на земле (соль, горох, угли), срезанные и сгоревшие кусты, обгоревшие деревья. */
     this.effects = [];
     this.cutBushes = new Set();
+    this.burntBushes = new Set();
     this.burntTrees = new Set();
     this.stats = null;
     this.boss = null;
@@ -253,6 +254,8 @@ export class Game {
       if (hazard) {
         damage = hazard.damage;
         if (hazard.consume) this.removeHazard(hazard);
+        // Капкан захлопнулся: закрытый лежит ещё немного.
+        if (hazard.kind === 'trap') this.broadcast({ t: 'trapSnap', x: hazard.x, z: hazard.z, variant: hazard.look });
         if (hazard.grab) { if (!player.drag && !player.downed) this.boss?.grab?.(player); return; }
         if (hazard.goose) this.boss?.gooseHit?.(player, hazard.goose);
       }
@@ -330,7 +333,7 @@ export class Game {
         game.shake(0.25, 0.3);
         // От молнии укрытие не спасает. Если попала только в край куста — сидящему в нём достанется от огня.
         const struck = Math.hypot(game.boss.x - x, game.boss.z - z) < spell.radius + (game.boss.radius ?? 0.5);
-        for (const i of game.bushesTouching(x, z, spell.radius)) game.cutBush(i, struck ? 0 : spell.damage);
+        for (const i of game.bushesTouching(x, z, spell.radius)) game.cutBush(i, struck ? 0 : spell.damage, true);
         game.burnTrees(x, z, spell.radius);
         if (struck) {
           const strike = () => game.damageBoss(player, spell.damage, false);
@@ -423,7 +426,7 @@ export class Game {
       game.effects.push({ id: game.nextId++, kind: id, x, z, r: a.radius, owner: player, born: game.clock.now,
         expire: game.clock.now + a.duration, nextTick: game.clock.now });
       if (id === 'coals') {
-        for (const i of game.bushesTouching(x, z, a.radius)) game.cutBush(i, a.damage * 2);
+        for (const i of game.bushesTouching(x, z, a.radius)) game.cutBush(i, a.damage * 2, true);
         game.burnTrees(x, z, a.radius);
       }
       game.boss?.onAbility?.(id, x, z);
@@ -452,9 +455,10 @@ export class Game {
   }
 
   /** Куст срезан или сгорел — до конца боя. Если в нём сидело Лихо — получает урон и выскакивает. */
-  cutBush(index, damage) {
+  cutBush(index, damage, burnt = false) {
     const bush = this.sceneData.bushes[index];
     this.cutBushes.add(index);
+    if (burnt) this.burntBushes.add(index);
     this.boss?.onBushCut?.(bush, damage);
   }
 
@@ -535,6 +539,7 @@ export class Game {
     this.decoy = null;
     this.effects = [];
     this.cutBushes = new Set();
+    this.burntBushes = new Set();
     this.burntTrees = new Set();
     this.curses = new Set();
     this.mapInput.clear();
@@ -637,7 +642,7 @@ export class Game {
 
   announce(text) { this.log(`Объявление: ${text}`); this.broadcast({ t: 'announce', text }); }
   shake(amount, duration) { this.broadcast({ t: 'shake', amount, duration }); }
-  flash(x, z, r) { this.broadcast({ t: 'flash', x, z, r }); }
+  flash(x, z, r, look = null) { this.broadcast({ t: 'flash', x, z, r, look }); }
   floatText(x, z, y, text, color, duration = 1.2) { this.broadcast({ t: 'text', x, z, y, text, color, duration }); }
   showDamage(x, z, amount) { this.broadcast({ t: 'damage', x, z, amount: Math.round(amount) }); }
   /** Подсказки атак (красные круги и полосы). Возвращают номер — чтобы убрать подсказку, если атака отменилась. */
@@ -674,7 +679,7 @@ export class Game {
     if (d > radius) { x *= radius / d; z *= radius / d; }
     this.hazards.push({ id: this.nextId++, type: 'zone', kind, look, x, z, r, damage, stun,
       consume: kind === 'trap', expire: this.clock.now + lifetime });
-    if (kind === 'strike') this.flash(x, z, r);
+    if (kind === 'strike') this.flash(x, z, r, look);
   }
 
   fireEnemy(x, z, dx, dz, speed, damage, parryable, lifetime, y = null, look = null) {
@@ -793,6 +798,7 @@ export class Game {
       })),
       effects: this.effects.map((e) => ({ id: e.id, kind: e.kind, x: r2(e.x), z: r2(e.z), r: e.r, left: r2(e.expire - now) })),
       cut: [...this.cutBushes],
+      burntBushes: [...this.burntBushes],
       burnt: [...this.burntTrees],
       decoy: this.activeDecoy() ? { x: r2(this.decoy.x), z: r2(this.decoy.z), owner: this.decoy.owner, left: r2(this.decoy.expire - now) } : null,
       boss: this.boss?.snapshot() ?? null,
