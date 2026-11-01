@@ -78,6 +78,7 @@ export const WORLDS = [
  * par — за сколько секунд бой считается быстрым (для рейтинга). mark — значок на особых предметах этого босса. pools — из чего выпадает снаряжение перед боем:
  * под каждого босса только то, что в этом бою полезно (у Лиха — только ближний бой).
  */
+const YAGA_INDEX = 9;
 const DUMMY_POOLS = { weapons: [0, 1, 2, 3, 4], abilities: ['peas', 'coals'], magic: ['spark', 'water'], charms: ['belt', 'wolf'], curses: ['cataract'] };
 export const BOSSES = [
   { name: 'Лихо Одноглазое', world: 0, description: 'Хитрое и скрытное. Нападает из кустов', kind: 'likho', arena: 'forest', par: 150, mark: 'characters/likho/eye.png',
@@ -91,7 +92,13 @@ export const BOSSES = [
   { name: 'Перун', world: 2, description: '', kind: 'dummy', arena: 'arena', par: 60, pools: DUMMY_POOLS },
   { name: 'Морена', world: 2, description: '', kind: 'dummy', arena: 'arena', par: 60, pools: DUMMY_POOLS },
   { name: 'Чернобог', world: 2, description: '', kind: 'dummy', arena: 'arena', par: 60, pools: DUMMY_POOLS },
+  // Пролог, вне миров: с неё начинается игра, победа над ней даёт избушку.
+  { name: 'Баба-Яга', world: -1, description: 'Хозяйка избушки на курьих ножках', kind: 'yaga', arena: 'clearing', par: 120,
+    pools: { weapons: [0, 1, 2, 3, 4], abilities: ['rope', 'salt', 'coals', 'comb', 'towel', 'bread'], magic: ['spark', 'wind', 'water', 'turn'],
+      charms: ['belt', 'wolf', 'bear', 'skull', 'doll', 'oil'], curses: ['cataract', 'swept', 'furious', 'hungry'] } },
 ];
+/** Индекс Бабы-Яги в BOSSES. */
+export const YAGA = BOSSES.length - 1;
 
 /** Сложности: на средней босс такой, как задуман; на тяжёлой — новые атаки и всё быстрее. Только на тяжёлой бывает S+. */
 export const DIFFICULTIES = [
@@ -117,6 +124,14 @@ export const ABILITIES = {
     description: 'Рассыпанный горох: враг на нём еле ползёт. Кто не видит — бежит на стук горошин.' },
   sickle: { name: 'Серп', icon: 'items/ability/sickle.png', unique: 0, cooldown: 6, range: 3.2, radius: 1.4, duration: 0, damage: 25,
     description: 'Срезает ближайший куст до конца боя — Лиху негде прятаться. Сидело в нём — получит по лапам.' },
+  rope: { name: 'Верёвка с петлёй', cooldown: 14, range: 10, duration: 0,
+    description: 'Петля сдёргивает летающего врага на землю, и какое-то время его можно бить.' },
+  comb: { name: 'Гребешок', unique: YAGA_INDEX, cooldown: 14, range: 9, radius: 2, duration: 8,
+    description: 'Брошенный гребешок вырастает в частокол и перекрывает налёт и бег.' },
+  towel: { name: 'Рушник', unique: YAGA_INDEX, cooldown: 14, range: 9, radius: 2.6, duration: 8,
+    description: 'Брошенный рушник становится рекой, в которой всё вязнет.' },
+  bread: { name: 'Ломоть хлеба', unique: YAGA_INDEX, cooldown: 12, range: 10, radius: 0.8, duration: 6,
+    description: 'Брошенный хлеб отвлекает гусей-лебедей.' },
   coals: { name: 'Горшок с углями', icon: 'items/ability/coals.png', cooldown: 12, range: 9, radius: 1.9, duration: 5, damage: 18,
     description: 'Горящие угли жгут врага, а кусты в огне сгорают — вместе с теми, кто в них прятался.' },
 };
@@ -129,6 +144,8 @@ export const MAGIC = {
     description: 'Через миг в точку под курсором бьёт молния. От неё не спрячешься в укрытии, а кусты сгорают.' },
   decoy: { name: 'Морок', icon: 'items/magic/decoy.png', cooldown: 20, range: 8, duration: 6,
     description: 'Морок-двойник богатыря: пока он не рассеется, враг нападает на него.' },
+  turn: { name: '«Повернись, избушка!»', unique: YAGA_INDEX, cooldown: 18, range: 0, duration: 5,
+    description: 'Заговор: избушка на 5 секунд отворачивается и не нападает.' },
   water: { name: 'Живая вода', icon: 'items/magic/water.png', cooldown: 25, heal: 40, range: 0,
     description: 'Глоток живой воды возвращает 40 здоровья.' },
 };
@@ -138,6 +155,9 @@ export const CHARMS = {
   chicken: { name: 'Куриный бог', icon: 'items/charm/chicken.png', unique: 0, description: 'Камень с дыркой: сквозь него видно спрятавшееся Лихо и любые капканы.' },
   belt: { name: 'Пояс с наузами', icon: 'items/charm/belt.png', description: 'Раз за бой смертельный удар рвёт пояс, а богатырь остаётся жив.' },
   bear: { name: 'Медвежий коготь', icon: 'items/charm/bear.png', description: 'Удары по уставшему, оглушённому или обессилевшему врагу — в полтора раза сильнее.' },
+  skull: { name: 'Череп с забора', unique: YAGA_INDEX, description: 'Его глаза показывают атаки Яги раньше.' },
+  doll: { name: 'Куколка Василисы', unique: YAGA_INDEX, description: 'Раз за бой вырывает из лопаты Яги.' },
+  oil: { name: 'Масло для ворот', unique: YAGA_INDEX, description: 'Забор и ворота Яги тебя не трогают.' },
   wolf: { name: 'Волчий клык', icon: 'items/charm/wolf.png', description: 'Когда здоровья меньше половины, атаки на треть быстрее.' },
 };
 
@@ -146,6 +166,9 @@ export const CURSES = {
   cataract: { name: 'Бельмо', icon: 'items/curse/cataract.png', description: 'Богатырь плохо видит: всё, что дальше нескольких шагов, тонет во тьме.' },
   wicked: { name: 'Злое Лихо', icon: 'items/curse/wicked.png', unique: 0, description: 'Выпады и броски Лиха на половину дальше.' },
   crooked: { name: 'Кривая доля', icon: 'items/curse/crooked.png', unique: 0, description: 'Неудачи от проклятия Лиха случаются вдвое чаще.' },
+  swept: { name: 'Заметённые следы', unique: YAGA_INDEX, description: 'Пыли от метлы вдвое больше.' },
+  furious: { name: 'Бешеная избушка', unique: YAGA_INDEX, description: 'Избушка бегает на треть быстрее.' },
+  hungry: { name: 'Прожорливая печь', unique: YAGA_INDEX, description: 'Огонь горит вдвое дольше.' },
   hiddenTraps: { name: 'Невидимые капканы', icon: 'items/curse/hiddenTraps.png', unique: 0, description: 'Капканы Лиха видно, только когда подошёл к ним вплотную.' },
 };
 

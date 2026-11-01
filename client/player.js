@@ -81,7 +81,9 @@ export class LocalPlayer {
     const game = this.game, input = game.input, me = this.me;
     if (!me) return;
     // Пока выбирается снаряжение перед боем, богатырь стоит.
-    const locked = game.cutscene || game.dialogueOpen || !!game.session?.preparing;
+    const locked = game.cutscene || game.dialogueOpen || !!game.session?.preparing || !!me.dragged;
+    // Тащат лопатой или гуси: атаки и перекат — чтобы вырваться.
+    if (me.dragged && (input.lightPressed || input.heavyPressed || input.dashPressed || input.interactPressed)) game.send({ t: 'struggle' });
 
     if (this.stunned) { this.vx = this.vz = 0; this.rollEnd = 0; }
 
@@ -109,7 +111,8 @@ export class LocalPlayer {
     const ox = this.x, oz = this.z;
     let nx = this.x + this.vx * dt, nz = this.z + this.vz * dt;
     const boss = game.boss;
-    const extra = boss && boss.pose !== 'Dead' && game.scene !== 'tavern' ? [{ type: 'circle', x: boss.x, z: boss.z, r: boss.radius ?? 0.55 }] : [];
+    const extra = boss && boss.pose !== 'Dead' && game.scene !== 'tavern' && !boss.airborne ? [{ type: 'circle', x: boss.x, z: boss.z, r: boss.radius ?? 0.55 }] : [];
+    if (boss?.hut && !boss.hut.fallen && !me.dragged) extra.push({ type: 'circle', x: boss.hut.x, z: boss.hut.z, r: boss.hut.r });
     [this.x, this.z] = resolveCollisions(game.sceneData, nx, nz, P.radius, extra);
     this.speed = dt > 0 ? Math.hypot(this.x - ox, this.z - oz) / dt : 0;
 
@@ -278,17 +281,22 @@ export class LocalPlayer {
     game.send({ t: 'fx', fx: 'slash', x: r2(this.x), z: r2(this.z), dx: this.aimX, dz: this.aimZ, range: step.range, arc: step.arc, color });
     blip('slash');
 
-    // Попадание: расстояние до края тела босса и угол дуги.
+    // Попадание: расстояние до края цели и угол дуги.
+    const reaches = (x, z, r) => {
+      const bx = x - this.x, bz = z - this.z, d = Math.hypot(bx, bz);
+      const surface = Math.max(0, d - r);
+      if (surface > step.range) return false;
+      const tx = d > 1e-3 ? bx / d * surface : 0, tz = d > 1e-3 ? bz / d * surface : 0;
+      const angle = Math.acos(Math.max(-1, Math.min(1, (tx * this.aimX + tz * this.aimZ) / Math.max(1e-3, Math.hypot(tx, tz))))) * 180 / Math.PI;
+      return tx * tx + tz * tz < 0.5 || angle <= step.arc / 2;
+    };
     const boss = game.boss;
     if (!boss || boss.hp <= 0) return;
-    const r = boss.radius ?? 0.55;
-    const bx = boss.x - this.x, bz = boss.z - this.z, d = Math.hypot(bx, bz);
-    const surface = Math.max(0, d - r);
-    if (surface > step.range) return;
-    const tx = d > 1e-3 ? bx / d * surface : 0, tz = d > 1e-3 ? bz / d * surface : 0;
-    const angle = Math.acos(Math.max(-1, Math.min(1, (tx * this.aimX + tz * this.aimZ) / Math.max(1e-3, Math.hypot(tx, tz))))) * 180 / Math.PI;
-    if (tx * tx + tz * tz >= 0.5 && angle > step.arc / 2) return;
-    game.send({ t: 'hit', damage: step.damage, fills: !card });
+    // Яга на крыше: бьём по ногам избушки. В воздухе ближним оружием не достать.
+    const hut = boss.hut;
+    if (hut?.active && !hut.fallen && boss.onRoof) { if (reaches(hut.x, hut.z, hut.r)) game.send({ t: 'hitHut' }); return; }
+    if (boss.airborne) return;
+    if (reaches(boss.x, boss.z, boss.radius ?? 0.55)) game.send({ t: 'hit', damage: step.damage, fills: !card });
   }
 
   onCardsChanged() { this.pendingCards = 0; }
@@ -370,7 +378,8 @@ export class LocalPlayer {
    * плащ) в текущей позе, на той высоте, где снаряд нарисован. Удары по земле и тело босса — по кругу у ног.
    */
   touches(h) {
-    if (h.type !== 'proj') return Math.hypot(h.x - this.x, h.z - this.z) < h.r + P.hurtRadius;
+    if (h.type === 'fence') return Math.hypot(this.x, this.z) > h.R;
+    if (h.type !== 'proj' || h.wide) return Math.hypot(h.x - this.x, h.z - this.z) < h.r + P.hurtRadius;
     if (Math.abs(h.z - this.z) > BODY_DEPTH) return false;
     const avatar = this.game.avatars.get(this.me?.id);
     if (!avatar) return Math.hypot(h.x - this.x, h.z - this.z) < h.r + P.hurtRadius;
@@ -403,10 +412,11 @@ export class LocalPlayer {
 
     const boss = game.boss;
     if (boss?.finisherReady && Math.hypot(boss.x - this.x, boss.z - this.z) < 3.2) {
-      this.focused = { id: 'finisher', prompt: 'Выколоть глаз' };
+      this.focused = { id: 'finisher', prompt: boss.finisherLabel ?? 'Выколоть глаз' };
     } else {
       const item = nearestInteractable(game.sceneData, this.x, this.z);
-      if (item) this.focused = { ...item, prompt: this.promptFor(item) };
+      // В первом бою с Ягой бежать некуда.
+      if (item && !(item.kind === 'exit' && game.session?.firstYaga)) this.focused = { ...item, prompt: this.promptFor(item) };
     }
     if (this.focused && input.interactPressed) {
       if (this.focused.kind === 'npc') game.hud.dialogue(this.focused);

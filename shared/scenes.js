@@ -98,6 +98,24 @@ function forest() {
   };
 }
 
+// ---------------------------------------------------------------- Поляна Бабы-Яги
+
+function clearing() {
+  const stove = { x: 0, z: 11.6 };
+  return {
+    id: 'clearing', title: 'Поляна Бабы-Яги', camera: 17, background: '#0d1410',
+    bounds: { type: 'circle', r: 15 }, bossRadius: 13.5,
+    spawns: [[-1.5, -9], [1.5, -9]], bossSpawn: { x: 0, z: 3, fx: 0, fz: -1 },
+    hutHome: { x: -7, z: 8.5 }, stove, gate: { x: 14.6, z: 0 },
+    obstacles: [circle(stove.x, stove.z, 1.5)],
+    interactables: [{ id: 'exit', kind: 'exit', x: 0, z: -14.2, radius: 2.2, prompt: 'Сбежать к избушке' }],
+    ground: { r: 17, color: '#3b3d24' },
+    light: { ambient: 0.62, tint: 'rgba(70,40,80,0.14)' },
+    lights: [{ x: stove.x, z: stove.z - 1, y: 1.2, color: '255,150,70', radius: 5, intensity: 0.5, flicker: true },
+      ...[45, 135, 225, 315].map((a) => ({ x: Math.sin(a * Math.PI / 180) * 14.8, z: Math.cos(a * Math.PI / 180) * 14.8, y: 1.8, color: '255,140,60', radius: 3.5, intensity: 0.35, flicker: true }))],
+  };
+}
+
 // ---------------------------------------------------------------- Обычная арена (для Чучела-заглушки)
 
 function arena() {
@@ -130,8 +148,9 @@ export const MAP = {
   bridge: { x: -1.5, z: 1.5, w: 4, d: 2 },
   stairs: { x: 13.4, z: 1.5 },
   // Узел 0 — распутье (старт), дальше — логова боссов по порядку BOSSES.
-  nodes: [[-18, -1], [-14, 4], [-12, -5], [-6, 1.5], [3, 4.5], [5, -5], [10, 1.5], [17, 4.5], [19, -5], [24, 1.5]],
-  edges: [[0, 1], [0, 2], [1, 2], [1, 3], [2, 3], [3, 4], [4, 5], [4, 6], [5, 6], [6, 7], [7, 8], [7, 9], [8, 9]],
+  // Последний узел — поляна Бабы-Яги (последний индекс BOSSES).
+  nodes: [[-18, -1], [-14, 4], [-12, -5], [-6, 1.5], [3, 4.5], [5, -5], [10, 1.5], [17, 4.5], [19, -5], [24, 1.5], [-18.5, -7.5]],
+  edges: [[0, 1], [0, 2], [1, 2], [1, 3], [2, 3], [3, 4], [4, 5], [4, 6], [5, 6], [6, 7], [7, 8], [7, 9], [8, 9], [0, 10]],
   nodeRadius: 2.2,
   barriers: [
     { world: 1, x: -1.5, z: 1.5, color: '#ff6619', text: 'Огненный туман' },
@@ -159,7 +178,7 @@ export function nodeNear(x, z) {
   return best;
 }
 
-export const SCENES = { tavern: tavern(), forest: forest(), arena: arena() };
+export const SCENES = { tavern: tavern(), forest: forest(), arena: arena(), clearing: clearing() };
 
 /**
  * Не даёт кругу (x, z, radius) зайти в препятствия и за край сцены. Возвращает исправленную точку.

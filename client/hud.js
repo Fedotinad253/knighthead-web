@@ -7,7 +7,7 @@ import { getVolume, setVolume, unlockAudio, blip } from './assets.js';
 
 const $ = (id) => document.getElementById(id);
 const iconUrl = (path) => new URL(`../assets/${path}`, import.meta.url).href;
-const PHASES = { likho: ['Из кустов', 'Ползучее', 'Слепое бешенство'] };
+const PHASES = { likho: ['Из кустов', 'Ползучее', 'Слепое бешенство'], yaga: ['Ступа', 'Избушка: бей по ногам', 'Печь'] };
 
 export class Hud {
   constructor(game) {
@@ -230,7 +230,8 @@ export class Hud {
         const boss = BOSSES[node - 1];
         text = game.isWorldUnlocked(boss.world) ? `[${keyName(game.input.bindings.interact[0])}] В бой: ${boss.name}` : 'Путь закрыт';
       }
-    } else if (local?.reviveTarget) text = `Удерживай [${keyName(game.input.bindings.interact[0])}] — поднять Богатыря ${local.reviveTarget.slot + 1}`;
+    } else if (game.me?.dragged) text = `Жми атаку — вырывайся! Ещё ${game.me.struggle}`;
+    else if (local?.reviveTarget) text = `Удерживай [${keyName(game.input.bindings.interact[0])}] — поднять Богатыря ${local.reviveTarget.slot + 1}`;
     else if (local?.focused && !this.dialogueOpen) text = `[${keyName(game.input.bindings.interact[0])}] ${local.focused.prompt}`;
     $('prompt').hidden = !text;
     $('prompt').textContent = text;
@@ -291,8 +292,9 @@ export class Hud {
     const fill = (id, list, field, item, iconClass = '', cls = '') => {
       $(id).innerHTML = list.map((key) => {
         const it = item(key), boss = BOSSES[it.unique];
-        const pic = it.icon ? `<img class="choice-icon ${iconClass}" src="${iconUrl(it.icon)}" alt="">` : `<span class="choice-letter">${it.name[0]}</span>`;
-        const mark = boss?.mark ? `<img class="unique-mark" src="${iconUrl(boss.mark)}" alt="Особый предмет">` : '';
+        const pic = it.icon ? `<img class="choice-icon ${iconClass}" src="${iconUrl(it.icon)}" alt="">` : `<span class="choice-letter">${it.name.match(/\p{L}/u)[0]}</span>`;
+        // Пока у босса нет своего значка, особый предмет отмечен звёздочкой.
+        const mark = !boss ? '' : boss.mark ? `<img class="unique-mark" src="${iconUrl(boss.mark)}" alt="Особый предмет">` : '<span class="unique-mark unique-star">★</span>';
         return `<button class="choice item ${cls}" data-${field}="${key}"><span class="choice-pic">${pic}${mark}</span><b>${it.name}</b></button>`;
       }).join('');
       for (const button of $(id).children) {
@@ -312,6 +314,11 @@ export class Hud {
     fill('loadout-magic', offer.magic, 'magic', (a) => MAGIC[a]);
     fill('loadout-charms', offer.charms, 'charm', (c) => CHARMS[c]);
     fill('loadout-curses', offer.curses, 'curse', (c) => CURSES[c], '', 'curse');
+    // В самом первом бою с Ягой нет ни проклятий, ни бегства.
+    $('loadout-curses').previousElementSibling.hidden = !offer.curses.length;
+    $('loadout-curses').hidden = !offer.curses.length;
+    $('loadout-summary').hidden = !offer.curses.length;
+    $('loadout-retreat').hidden = !!this.game.session.firstYaga;
     this.markPicked();
     const bindings = this.game.input.bindings;
     $('loadout-ability-key').textContent = `(${keyName(bindings.ability[0])})`;

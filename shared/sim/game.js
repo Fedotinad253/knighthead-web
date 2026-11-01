@@ -2,11 +2,12 @@
 // (одиночная игра), и на Node-сервере (кооп). Здесь решается: где мы (таверна, карта, арена), где избушка, какой босс и сложность, урон, карты, снаряды.
 // Богатырём управляет его игрок у себя в браузере и присылает позицию (отзывчиво, как Owner-режим в Unity);
 // попадания по себе он тоже определяет сам — так уклонение и парирование честны по тому, что он видит.
-import { WEAPONS, BOSSES, DIFFICULTIES, WORLDS, CARDS, PLAYER, SESSION, ABILITIES, MAGIC, RANKS, RANK_S_PLUS, rateFight, attackStep, ATTACK } from '../data.js';
+import { WEAPONS, BOSSES, DIFFICULTIES, WORLDS, CARDS, PLAYER, SESSION, YAGA, ABILITIES, MAGIC, RANKS, RANK_S_PLUS, rateFight, attackStep, ATTACK } from '../data.js';
 import { emptyProgress, totalPoints } from '../progress.js';
 import { SCENES, MAP, clampOnMap, nodeNear, nearestInteractable } from '../scenes.js';
 import { Likho } from './likho.js';
 import { Dummy } from './dummy.js';
+import { Yaga } from './yaga.js';
 import { Tasks } from './tasks.js';
 
 const MAX_PLAYERS = 2;
@@ -50,6 +51,8 @@ export class Game {
 
   get sceneData() { return SCENES[this.scene]; }
   get results() { return this.saved.results; }
+  /** Новая игра: никто ещё не побеждён, начинаем с боя с Ягой. Карта и таверна откроются после победы. */
+  get prologue() { return this.results.every((r) => r < 0); }
 
   log(text) { if (!this.flags.quiet) console.log(`[KnightHead] ${text}`); }
 
@@ -74,6 +77,7 @@ export class Game {
     this.send(player, { t: 'welcome', id: player.id, slot, ...this.sessionInfo() });
     this.send(player, { t: 'teleport', x: player.x, z: player.z, fx: 0, fz: 1 });
     if (this.flags.boss >= 0 && this.autoStartAt < 0) this.autoStartAt = this.clock.now + 3;
+    else if (this.flags.boss < 0 && this.players.length === 1 && this.prologue) this.startBoss(YAGA, 0);
 
     socket.onmessage = (text) => {
       let message;
@@ -103,7 +107,7 @@ export class Game {
     switch (m.t) {
       case 'state':
         // Позицией богатыря управляет его игрок. На карте богатыри спрятаны — позицию не принимаем.
-        if (this.state !== SESSION.MAP && Number.isFinite(m.x) && Number.isFinite(m.z)) {
+        if (this.state !== SESSION.MAP && !player.drag && Number.isFinite(m.x) && Number.isFinite(m.z)) {
           player.x = m.x; player.z = m.z; player.fx = m.fx; player.fz = m.fz;
         }
         player.anim = m.anim ?? {};
@@ -111,10 +115,12 @@ export class Game {
         break;
 
       case 'hit': { // ближний удар по боссу (попадание посчитал игрок)
-        if (!this.boss || player.downed) break;
+        if (!this.boss || player.downed || this.boss.meleeImmune) break;
         this.damageBoss(player, Math.min(m.damage, 200), m.fills);
         break;
       }
+      case 'hitHut': if (!player.downed) this.boss?.hitHut?.(1); break;
+      case 'struggle': this.struggle(player); break;
       case 'fire': this.firePlayer(player, m); this.boss?.hear?.(player.x, player.z); break;
       case 'spendCard': player.cards = Math.max(0, player.cards - 1); break;
       case 'fx':
@@ -191,7 +197,7 @@ export class Game {
         this.beginFight(loadout);
         break;
       }
-      case 'retreat': if (this.state === SESSION.ARENA && this.preparing) this.goTo(SESSION.MAP); break;
+      case 'retreat': if (this.state === SESSION.ARENA && this.preparing && !this.firstYaga) this.goTo(SESSION.MAP); break;
       case 'closeStone': this.stoneOpen = false; this.stoneBoss = -1; break;
       case 'leaveMap': if (this.state === SESSION.MAP && !this.stoneOpen) this.goTo(SESSION.TAVERN); break;
       case 'debug': if (this.flags.allowDebug) this.debug(player, m); break;
@@ -224,6 +230,7 @@ export class Game {
     const item = this.sceneData.interactables?.find((i) => i.id === id);
     if (!item || Math.hypot(item.x - player.x, item.z - player.z) > item.radius * 1.5) return;
     if (item.kind === 'rack') player.weapon = item.weapon;
+    else if (item.kind === 'exit' && this.firstYaga) return; // первый бой с Ягой: бежать некуда
     else if (item.kind === 'map' || item.kind === 'exit') this.goTo(SESSION.MAP);
   }
 
@@ -235,13 +242,26 @@ export class Game {
     } else if (m.hazard === 'body') {
       damage = this.boss?.contactDamage ?? 0;
       if (!damage) return;
+    } else if (m.hazard === 'hutCharge') {
+      damage = this.boss?.hutChargeDamage ?? 0;
+      if (!damage) return;
+    } else if (m.hazard === 'fence') {
+      damage = this.boss?.fenceDamage?.(player) ?? 0;
+      if (!damage) return;
     } else {
       const hazard = this.hazards.find((h) => h.id === m.hazard);
       if (hazard) {
         damage = hazard.damage;
         if (hazard.consume) this.removeHazard(hazard);
+        if (hazard.grab) { if (!player.drag && !player.downed) this.boss?.grab?.(player); return; }
+        if (hazard.goose) this.boss?.gooseHit?.(player, hazard.goose);
       }
     }
+    this.damagePlayer(player, damage);
+  }
+
+  /** Нанести урон богатырю. */
+  damagePlayer(player, damage) {
     if (this.flags.godmode || player.downed || !(damage > 0)) return;
     // Пояс с наузами: раз за бой смертельный удар рвёт пояс, а не богатыря.
     if (player.charm === 'belt' && !player.beltUsed && player.hp - damage <= 0 && player.hp > 1) {
@@ -276,7 +296,7 @@ export class Game {
     const pools = BOSSES[boss].pools;
     const pick = (list) => shuffle([...list]).slice(0, 3);
     return { weapons: pick(pools.weapons).sort((a, b) => a - b), abilities: pick(pools.abilities), magic: pick(pools.magic),
-      charms: pick(pools.charms), curses: pick(pools.curses) };
+      charms: pick(pools.charms), curses: this.firstYaga ? [] : pick(pools.curses) };
   }
 
   /** Магия: ветер — конусом в сторону курсора, искра и морок — в точку, живая вода — на себя. */
@@ -288,6 +308,10 @@ export class Game {
     const dx = x - player.x, dz = z - player.z, d = Math.hypot(dx, dz);
     if (spell.range && d > spell.range) { x = player.x + dx / d * spell.range; z = player.z + dz / d * spell.range; }
     [x, z] = this.clampToBossArea(x, z);
+    if (id === 'turn' && !this.boss.onTurnHut?.(spell.duration)) {
+      this.floatText(player.x, player.z, 2.6, 'Избушка не слышит', '#cfc4b0', 1);
+      return;
+    }
     player.magicReadyAt = now + spell.cooldown;
     this.broadcast({ t: 'magicFx', kind: id, x: player.x, z: player.z, tx: x, tz: z, delay: spell.delay ?? 0 });
 
@@ -312,6 +336,8 @@ export class Game {
           const strike = () => game.damageBoss(player, spell.damage, false);
           if (game.boss.throughCover) game.boss.throughCover(strike); else strike();
         }
+        const hut = game.boss.hut;
+        if (hut && Math.hypot(hut.x - x, hut.z - z) < spell.radius + 2.6) game.boss.hitHut?.(1);
       })(this));
     } else if (id === 'decoy') {
       this.decoy = { id: 'decoy', x, z, expire: now + spell.duration, downed: false, owner: player.id };
@@ -326,10 +352,55 @@ export class Game {
     return r > radius ? [x * radius / r, z * radius / r] : [x, z];
   }
 
+  /** След на земле (пыль Яги и т.п.). */
+  addEffect(kind, x, z, r, duration, owner = null) {
+    this.effects.push({ id: this.nextId++, kind, x, z, r, owner, born: this.clock.now, expire: this.clock.now + duration, nextTick: this.clock.now });
+  }
+
+  /** Широкий снаряд врага: всадник, лопата, гусь. Задевает кругом r, а не по очертаниям богатыря. */
+  spawnWide(x, z, dx, dz, speed, r, damage, lifetime, look, extra = {}) {
+    this.hazards.push({ id: this.nextId++, type: 'proj', wide: true, look, x, z, y: 1, vx: dx * speed, vz: dz * speed, r, damage,
+      parryable: false, consume: false, expire: this.clock.now + lifetime, ...extra });
+  }
+
+  /** Потащить богатыря к точке (лопата, гуси). need — сколько нажатий нужно, чтобы вырваться. */
+  dragPlayer(player, x, z, speed, need, source, onArrive) {
+    player.drag = { x, z, speed, need, presses: 0, source, onArrive };
+    this.send(player, { t: 'dragStart' });
+  }
+
+  struggle(player) {
+    const drag = player.drag;
+    if (!drag || ++drag.presses < drag.need) return;
+    player.drag = null;
+    this.floatText(player.x, player.z, 2.9, 'Вырвался!', '#7be08a', 1.2);
+  }
+
+  updateDrags(dt) {
+    for (const p of this.players) {
+      const drag = p.drag;
+      if (!drag) continue;
+      if (p.downed || this.state !== SESSION.ARENA) { p.drag = null; continue; }
+      const dx = drag.x - p.x, dz = drag.z - p.z, d = Math.hypot(dx, dz), step = drag.speed * dt;
+      if (d <= step) {
+        p.x = drag.x; p.z = drag.z;
+        p.drag = null;
+        drag.onArrive?.();
+      } else { p.x += dx / d * step; p.z += dz / d * step; }
+      this.send(p, { t: 'drag', x: r2(p.x), z: r2(p.z) });
+    }
+  }
+
   /** Бросить способность в точку (x, z). Серп — срезает ближайший куст, бросать не нужно. */
   useAbility(player, m) {
     const id = player.ability, a = ABILITIES[id], now = this.clock.now;
     if (!a || this.state !== SESSION.ARENA || player.downed || now < player.abilityReadyAt || !this.boss) return;
+    if (id === 'rope') {
+      if (!this.boss.onRope?.(player, a.range)) { this.floatText(player.x, player.z, 2.6, 'Некого сдёрнуть', '#cfc4b0', 1); return; }
+      player.abilityReadyAt = now + a.cooldown;
+      this.broadcast({ t: 'abilityFx', kind: id, x: player.x, z: player.z, tx: this.boss.x, tz: this.boss.z });
+      return;
+    }
     if (id === 'sickle') {
       const bush = this.nearestBush(player.x, player.z, a.range);
       if (bush < 0) { this.floatText(player.x, player.z, 2.6, 'Срезать нечего', '#cfc4b0', 1); return; }
@@ -419,6 +490,8 @@ export class Game {
     this.currentBoss = boss;
     this.difficulty = Math.min(Math.max(difficulty | 0, 0), DIFFICULTIES.length - 1);
     this.goTo(SESSION.ARENA, BOSSES[boss].arena);
+    // Самый первый бой с Ягой — без проклятий и без бегства.
+    this.firstYaga = boss === YAGA && this.results[YAGA] < 0;
     const o = this.rollOffer(boss);
     if (prepare) {
       this.offer = o;
@@ -439,12 +512,13 @@ export class Game {
       p.ability = loadout.ability;
       p.magic = loadout.magic;
       p.charm = loadout.charm;
+      p.dollUsed = false;
       p.abilityReadyAt = 0;
       p.magicReadyAt = 0;
       p.beltUsed = false;
     }
     this.stats = { start: this.clock.now, damageTaken: 0, parries: 0 };
-    this.boss = entry.kind === 'likho' ? new Likho(this, d) : new Dummy(this, d, entry.name);
+    this.boss = entry.kind === 'likho' ? new Likho(this, d) : entry.kind === 'yaga' ? new Yaga(this, d) : new Dummy(this, d, entry.name);
     this.announce(`${entry.name} — ${d.name}`);
   }
 
@@ -455,6 +529,8 @@ export class Game {
     this.stoneBoss = -1;
     this.offer = null;
     this.preparing = false;
+    this.firstYaga = false;
+    this.darkUntil = 0;
     this.stats = null;
     this.decoy = null;
     this.effects = [];
@@ -478,6 +554,7 @@ export class Game {
       p.dropped = null;
       p.cursed = false;
       p.slipperyUntil = 0;
+      p.drag = null;
       p.beltUsed = false;
       p.abilityReadyAt = 0;
       // Бытовая способность, магия и оберег — только в бою (выдаются в beginFight).
@@ -496,7 +573,7 @@ export class Game {
 
   sessionInfo() {
     return {
-      state: this.state, scene: this.state === SESSION.MAP ? 'map' : this.scene,
+      state: this.state, scene: this.state === SESSION.MAP ? 'map' : this.scene, firstYaga: !!this.firstYaga,
       boss: this.currentBoss, difficulty: this.difficulty, ...this.progressInfo(),
     };
   }
@@ -539,7 +616,7 @@ export class Game {
     this.broadcast({ t: 'result', ...this.result });
 
     const [defeated, total] = this.worldProgress(world);
-    this.log(`Победа над «${BOSSES[boss].name}» (${DIFFICULTIES[this.difficulty].name}), рейтинг ${rank.name}. ${WORLDS[world].name}: ${defeated}/${total}`);
+    this.log(`Победа над «${BOSSES[boss].name}» (${DIFFICULTIES[this.difficulty].name}), рейтинг ${rank.name}. ${WORLDS[world]?.name ?? 'Пролог'}: ${defeated}/${total}`);
     const next = WORLDS[world + 1];
     this.victory = nextWasLocked && next && this.isWorldUnlocked(world + 1)
       ? `Победа! Открыт путь в ${next.name}` : `Победа над «${BOSSES[boss].name}»!`;
@@ -551,7 +628,9 @@ export class Game {
     this.fightResolved = true;
     this.recordVictory();
     this.announce(this.victory);
-    this.tasks.start((function* (game) { yield 4; game.goTo(SESSION.MAP); })(this));
+    // Первая победа над Ягой: избушка теперь твоя, заходим внутрь.
+    const home = this.firstYaga ? SESSION.TAVERN : SESSION.MAP;
+    this.tasks.start((function* (game) { yield 4; game.goTo(home); })(this));
   }
 
   // ---------------------------------------------------------------- Действия для боссов
@@ -598,8 +677,8 @@ export class Game {
     if (kind === 'strike') this.flash(x, z, r);
   }
 
-  fireEnemy(x, z, dx, dz, speed, damage, parryable, lifetime, y = null) {
-    this.hazards.push({ id: this.nextId++, type: 'proj', x, z, y: y ?? (this.boss?.kind === 'likho' ? 2.2 : 1.2),
+  fireEnemy(x, z, dx, dz, speed, damage, parryable, lifetime, y = null, look = null) {
+    this.hazards.push({ id: this.nextId++, type: 'proj', look, x, z, y: y ?? (this.boss?.kind === 'likho' ? 2.2 : 1.2),
       vx: dx * speed, vz: dz * speed, r: 0.35, damage, parryable, consume: true, expire: this.clock.now + lifetime });
   }
 
@@ -634,6 +713,7 @@ export class Game {
     }
 
     if (this.state === SESSION.MAP) this.moveHut(dt);
+    this.updateDrags(dt);
     if (this.boss) {
       this.boss.update();
       // Проверка без людей: боссу постепенно наносится урон.
@@ -653,7 +733,7 @@ export class Game {
     for (const e of this.effects) {
       if (e.kind !== 'coals' || now < e.nextTick || !this.boss) continue;
       e.nextTick = now + 0.5;
-      if (Math.hypot(this.boss.x - e.x, this.boss.z - e.z) < e.r + (this.boss.radius ?? 0.5))
+      if (!this.boss.airborne && Math.hypot(this.boss.x - e.x, this.boss.z - e.z) < e.r + (this.boss.radius ?? 0.5))
         this.damageBoss(e.owner, ABILITIES.coals.damage / 2, false);
     }
 
@@ -661,8 +741,13 @@ export class Game {
     for (const p of this.projectiles) {
       p.x += p.vx * dt; p.z += p.vz * dt;
       if (!this.boss || p.hitBoss) continue;
-      if (Math.hypot(p.x - this.boss.x, p.z - this.boss.z) < this.boss.radius + 0.25) {
-        this.damageBoss(p.owner, p.damage, p.fills);
+      const hut = this.boss.hut;
+      if (hut?.active && !hut.fallen && this.boss.onRoof && Math.hypot(p.x - hut.x, p.z - hut.z) < 2.85) {
+        this.boss.hitHut(0.5); // стрела по ноге считается за половину удара
+        p.hitBoss = true;
+        if (!p.pierce) p.expire = 0;
+      } else if (Math.hypot(p.x - this.boss.x, p.z - this.boss.z) < this.boss.radius + 0.25) {
+        this.damageBoss(p.owner, p.damage * (this.boss.arrowFactor ?? 1), p.fills);
         p.hitBoss = true;
         if (!p.pierce) p.expire = 0;
       }
@@ -673,7 +758,11 @@ export class Game {
     if (this.state === SESSION.ARENA && !this.fightResolved && this.players.length && this.players.every((p) => p.downed)) {
       if (this.wipeTimer === 0) this.announce('Богатыри пали...');
       this.wipeTimer += dt;
-      if (this.wipeTimer >= 3) { this.fightResolved = true; this.goTo(SESSION.MAP); }
+      if (this.wipeTimer >= 3) {
+        this.fightResolved = true;
+        // В самом первом бою карты ещё нет: пробуем снова.
+        if (this.firstYaga) this.startBoss(YAGA, 0); else this.goTo(SESSION.MAP);
+      }
     } else this.wipeTimer = 0;
   }
 
@@ -694,13 +783,13 @@ export class Game {
     return {
       t: 'snap', time: Math.round(now * 1000) / 1000,
       session: { state: this.state, hut: this.hut.map(r2), stoneOpen: this.stoneOpen, stoneBoss: this.stoneBoss,
-        boss: this.currentBoss, difficulty: this.difficulty, offer: this.offer, preparing: this.preparing, curses: [...this.curses], ...this.progressInfo() },
+        boss: this.currentBoss, difficulty: this.difficulty, offer: this.offer, preparing: this.preparing, firstYaga: !!this.firstYaga, dark: now < (this.darkUntil ?? 0), curses: [...this.curses], ...this.progressInfo() },
       players: this.players.map((p) => ({
         id: p.id, slot: p.slot, x: r2(p.x), z: r2(p.z), fx: r2(p.fx), fz: r2(p.fz), hp: Math.round(p.hp), downed: p.downed,
         weapon: p.weapon, cards: Math.round(p.cards * 100) / 100, dropped: p.dropped, cursed: p.cursed,
         slippery: (p.slipperyUntil ?? 0) > now, anim: p.anim,
         ability: p.ability, abilityCooldown: Math.max(0, r2(p.abilityReadyAt - now)), charm: p.charm, beltUsed: p.beltUsed,
-        magic: p.magic, magicCooldown: Math.max(0, r2(p.magicReadyAt - now)),
+        magic: p.magic, magicCooldown: Math.max(0, r2(p.magicReadyAt - now)), dragged: !!p.drag, struggle: p.drag ? p.drag.need - p.drag.presses : 0,
       })),
       effects: this.effects.map((e) => ({ id: e.id, kind: e.kind, x: r2(e.x), z: r2(e.z), r: e.r, left: r2(e.expire - now) })),
       cut: [...this.cutBushes],
@@ -708,7 +797,7 @@ export class Game {
       decoy: this.activeDecoy() ? { x: r2(this.decoy.x), z: r2(this.decoy.z), owner: this.decoy.owner, left: r2(this.decoy.expire - now) } : null,
       boss: this.boss?.snapshot() ?? null,
       hazards: this.hazards.map((h) => h.type === 'proj'
-        ? { id: h.id, type: 'proj', x: r2(h.x), z: r2(h.z), y: h.y, vx: r2(h.vx), vz: r2(h.vz), r: h.r, parry: h.parryable, dmg: h.damage }
+        ? { id: h.id, type: 'proj', look: h.look, wide: h.wide, x: r2(h.x), z: r2(h.z), y: h.y, vx: r2(h.vx), vz: r2(h.vz), r: h.r, parry: h.parryable, dmg: h.damage }
         : { id: h.id, type: 'zone', kind: h.kind, look: h.look, x: r2(h.x), z: r2(h.z), r: h.r, dmg: h.damage, stun: h.stun }),
       arrows: this.projectiles.map((p) => ({ id: p.id, x: r2(p.x), z: r2(p.z), vx: r2(p.vx), vz: r2(p.vz) })),
     };

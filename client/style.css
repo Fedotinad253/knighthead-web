@@ -65,6 +65,7 @@ canvas#game { position: fixed; inset: 0; width: 100vw; height: 100vh; display: b
 .stone-buttons { margin-top: 12px; }
 #loadout { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(900px, 96vw); max-height: 96vh; overflow: auto;
   background: rgba(20, 14, 10, 0.9); border: 1px solid var(--edge); border-radius: 14px; padding: 14px 22px; box-shadow: 0 20px 60px rgba(0,0,0,0.6); }
+#loadout-go { margin-left: auto; }
 #loadout-title { font-size: 26px; color: var(--gold); font-weight: 700; text-align: center; text-shadow: 0 2px 4px #000; }
 #loadout h3 { margin: 6px 0 3px; font-size: 16px; color: var(--gold); text-align: left; text-shadow: 0 1px 2px #000; }
 .choice-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
@@ -81,6 +82,7 @@ canvas#game { position: fixed; inset: 0; width: 100vw; height: 100vh; display: b
   background: rgba(0,0,0,0.3); font-size: 26px; font-weight: 700; color: rgba(243,234,216,0.6); }
 .unique-mark { position: absolute; right: -5px; top: -5px; width: 24px; height: 24px; padding: 2px; object-fit: contain; border-radius: 50%;
   background: #1a120c; border: 1px solid var(--gold); box-shadow: 0 0 6px rgba(255, 217, 102, 0.6); }
+.unique-star { display: flex; align-items: center; justify-content: center; color: var(--gold); font-size: 14px; line-height: 1; }
 #loadout-tip { position: fixed; z-index: 20; width: 300px; padding: 9px 13px; border-radius: 9px; pointer-events: none; font-size: 14px; line-height: 1.35;
   background: rgba(12, 8, 6, 0.97); border: 1px solid var(--gold); box-shadow: 0 6px 22px rgba(0,0,0,0.7); }
 #tip-name { display: block; color: var(--gold); font-size: 16px; margin-bottom: 3px; }

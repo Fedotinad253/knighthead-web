@@ -4,6 +4,7 @@ import { WEAPONS, WORLDS, BOSSES } from '../shared/data.js';
 import { SCENES } from '../shared/scenes.js';
 import { assets } from './assets.js';
 import { shade, SIN, ORB_LIFT, ORB_RADIUS } from './view.js';
+import { drawClearingProps, drawYaga, drawHut, drawWideProjectile, drawFireZone } from './yagaview.js';
 import { bogatyrPose } from './rig.js';
 import { drawParryRing } from './vfx.js';
 import { keyName } from './input.js';
@@ -25,7 +26,11 @@ export function drawWorld(game) {
   game.vfx.drawGround(view);
   const effects = game.latest?.effects ?? [];
   for (const e of effects) drawEffect(view, e, game.now);
-  for (const h of game.liveHazards()) if (h.type === 'zone' && h.kind === 'trap' && trapVisible(game, h)) drawTrap(view, h);
+  for (const h of game.liveHazards()) {
+    if (h.type !== 'zone') continue;
+    if (h.kind === 'trap' && trapVisible(game, h)) drawTrap(view, h);
+    else if (h.kind === 'fire') drawFireZone(view, h, game.now);
+  }
   for (const p of game.players) {
     if (!p.visible) continue;
     if (p.anim?.parry > 0) drawParryRing(view, p.x, p.z, p.anim.parry);
@@ -37,7 +42,9 @@ export function drawWorld(game) {
   if (scene.id === 'tavern') addTavernProps(game, add);
   if (scene.id === 'forest') addForestProps(game, add);
   if (scene.id === 'arena') addArenaProps(game, add);
-  for (const item of scene.interactables ?? []) if (item.kind === 'exit') add(item.z + 1, () => drawExit(view, item, game.now));
+  if (scene.id === 'clearing') drawClearingProps(game, add);
+  const exits = game.session?.firstYaga ? [] : (scene.interactables ?? []).filter((item) => item.kind === 'exit');
+  for (const item of exits) add(item.z + 1, () => drawExit(view, item, game.now));
 
   for (const p of game.players) if (p.visible) add(p.z, () => drawPlayer(game, p));
   // Морок: полупрозрачный двойник того, кто его наслал.
@@ -52,9 +59,11 @@ export function drawWorld(game) {
     const b = game.boss;
     // Спрятавшееся Лихо рисуется раньше своего куста — куст его закрывает.
     const hidden = b.pose === 'Hidden' || b.pose === 'Peek';
-    add(b.z + (hidden ? 0.6 : 0), () => drawBoss(game, b));
+    if (b.hut) add(b.hut.z, () => drawHut(game, b.hut));
+    // Яга на крыше рисуется поверх избушки.
+    add(b.onRoof ? b.hut.z - 0.5 : b.z + (hidden ? 0.6 : 0), () => (b.kind === 'yaga' ? drawYaga(game, b) : drawBoss(game, b)));
   }
-  for (const h of game.liveHazards()) if (h.type === 'proj') add(h.z, () => drawOrb(view, h, game.now));
+  for (const h of game.liveHazards()) if (h.type === 'proj') add(h.z, () => (h.wide || h.look ? drawWideProjectile(view, h, game.now) : drawOrb(view, h, game.now)));
   for (const a of game.liveArrows()) add(a.z, () => drawArrow(view, a));
 
   drawables.sort((a, b) => b.key - a.key);
@@ -76,18 +85,19 @@ export function drawWorld(game) {
     view.groundEllipse(b.x, b.z, 0.85, 0.85, null, `rgba(255,220,90,${pulse})`, 0.05);
     view.label(b.x, b.z, 1.9, '◉', `rgba(255,217,77,${pulse})`, 0.55);
   }
-  if (game.session?.curses?.includes('cataract')) drawCataract(game);
+  // Бельмо и темнота после чёрного всадника.
+  if (game.session?.curses?.includes('cataract') || game.session?.dark) drawCataract(game);
 
   // Подписи и всплывающий текст — поверх света.
   if (scene.id === 'tavern') drawTavernLabels(game);
-  for (const item of scene.interactables ?? []) if (item.kind === 'exit') view.label(item.x, item.z, 2.4, 'Бегство', '#ffbf66', 0.45);
+  for (const item of exits) view.label(item.x, item.z, 2.4, 'Бегство', '#ffbf66', 0.45);
   for (const p of game.players) {
     if (!p.visible) continue;
     if (p.slippery) view.label(p.x, p.z, 3.1, '!', `rgba(217,115,255,${0.4 + 0.6 * Math.abs(Math.sin(game.now * 9))})`, 0.9);
     if (p.downed) view.label(p.x, p.z, 1.4, 'Пал', '#ff8a80', 0.4);
   }
   for (const p of game.players) if (p.dropped) view.label(p.dropped[0], p.dropped[1], 1.3, 'Подобрать', '#d973ff', 0.36);
-  if (game.boss?.finisherReady) view.label(game.boss.x, game.boss.z, 3.4, `[${keyName(game.input.bindings.interact[0])}] Выколоть глаз`, '#ffd94d', 0.5);
+  if (game.boss?.finisherReady) view.label(game.boss.x, game.boss.z, 3.4, `[${keyName(game.input.bindings.interact[0])}] ${game.boss.finisherLabel ?? 'Выколоть глаз'}`, '#ffd94d', 0.5);
   if (game.boss?.kind === 'dummy') view.label(game.boss.x, game.boss.z, 3.4, game.boss.name, '#ffe9a8', 0.4);
   game.vfx.drawTop(view);
   if (game.showHitboxes) drawHitboxes(game);
@@ -453,6 +463,22 @@ function trapVisible(game, h) {
 function drawEffect(view, e, now) {
   const fade = Math.min(1, e.left / 0.8);
   const ctx = view.ctx;
+  if (e.kind === 'dust') {
+    // Пыль Яги закрывает подсказки атак.
+    for (let i = 0; i < 9; i++) {
+      const a = i * 2.39996 + now * 0.2, r = e.r * Math.sqrt((i + 0.5) / 9) * 0.85;
+      view.groundEllipse(e.x + Math.sin(a) * r, e.z + Math.cos(a) * r, e.r * 0.55, e.r * 0.55, `rgba(150,135,95,${0.75 * fade})`);
+    }
+  } else if (e.kind === 'comb') {
+    for (let i = 0; i < 14; i++) {
+      const a = i * Math.PI * 2 / 14, x = e.x + Math.sin(a) * e.r, z = e.z + Math.cos(a) * e.r;
+      view.cylinder(x, z, 0.18, 1.7 * fade, '#5a4426');
+    }
+  } else if (e.kind === 'towel') {
+    view.groundEllipse(e.x, e.z, e.r, e.r, `rgba(70,130,180,${0.55 * fade})`, `rgba(190,225,240,${0.7 * fade})`, 0.05);
+  } else if (e.kind === 'bread') {
+    view.groundEllipse(e.x, e.z, 0.5, 0.35, `rgba(138,90,46,${fade})`, 'rgba(60,35,15,0.9)', 0.04);
+  }
   if (e.kind === 'salt') {
     view.groundEllipse(e.x, e.z, e.r, e.r, `rgba(240,236,225,${0.12 * fade})`, `rgba(245,242,232,${0.9 * fade})`, 0.09);
     for (let i = 0; i < 24; i++) {

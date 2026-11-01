@@ -117,8 +117,10 @@ class Game {
       case 'parryFlash': this.vfx.parryFlash(m.x, m.z); playSound('parry', 0.6); break;
       case 'hurtFlash': { const a = this.avatars.get(m.id); if (a) a.flashUntil = this.now + 0.12; break; }
       case 'fx': if (m.fx === 'slash') this.vfx.slash(m.x, m.z, m.dx, m.dz, m.range, m.arc, m.color); break;
+      case 'drag': this.local.x = m.x; this.local.z = m.z; break;
       case 'abilityFx':
-        if (m.kind === 'sickle') this.vfx.slash(m.x, m.z, m.tx - m.x, m.tz - m.z, Math.hypot(m.tx - m.x, m.tz - m.z) + 1, 120, 'rgba(220,235,200,0.7)');
+        if (m.kind === 'rope') this.vfx.slash(m.x, m.z, m.tx - m.x, m.tz - m.z, Math.hypot(m.tx - m.x, m.tz - m.z), 8, 'rgba(210,190,140,0.8)');
+        else if (m.kind === 'sickle') this.vfx.slash(m.x, m.z, m.tx - m.x, m.tz - m.z, Math.hypot(m.tx - m.x, m.tz - m.z) + 1, 120, 'rgba(220,235,200,0.7)');
         else this.vfx.toss(m.kind, m.x, m.z, m.tx, m.tz, m.flight);
         break;
       case 'magicFx':
@@ -126,6 +128,7 @@ class Game {
         else if (m.kind === 'spark') this.vfx.ring(m.tx, m.tz, 1.6, m.delay, '255,230,120');
         else if (m.kind === 'decoy') this.vfx.ring(m.tx, m.tz, 0.9, 0.4, '170,190,255');
         else if (m.kind === 'water') this.vfx.ring(m.x, m.z, 1.1, 0.5, '120,230,150');
+        else if (m.kind === 'turn') this.vfx.ring(m.x, m.z, 1.4, 0.5, '255,217,102');
         break;
       case 'result': this.hud.showResult(m); break;
     }
@@ -167,6 +170,9 @@ class Game {
     const b = this.boss;
     // Тело Лиха ранит при столкновении (кроме укрытия и обессиленного); повторно — после неуязвимости.
     if (b?.contact) list.push({ id: 'body', key: 'body', repeat: true, type: 'body', x: b.x, z: b.z, r: (b.radius ?? 0.55) + 0.2, dmg: b.contact });
+    // Забор Яги ранит прижавшегося (с маслом для ворот — нет), бегущая избушка сбивает.
+    if (b?.fenceR && this.me?.charm !== 'oil') list.push({ id: 'fence', key: 'fence', repeat: true, type: 'fence', R: b.fenceR, x: 0, z: 0, r: 0, dmg: 8 });
+    if (b?.hut?.charging) list.push({ id: 'hutCharge', key: `hut:${b.hut.token}`, type: 'body', x: b.hut.x, z: b.hut.z, r: b.hut.r + 0.2, dmg: 20 });
     if (b?.claws) list.push({ id: 'claws', key: `claws:${b.claws.token}`, type: 'claws', x: b.x + b.fx * 0.6, z: b.z + b.fz * 0.6, r: 1.3, dmg: b.claws.damage });
     return list;
   }
@@ -233,14 +239,18 @@ class Game {
     // Какое отдаление нужно, чтобы богатырь и босс (с головой и запасом по краям) влезли в кадр.
     const [halfW, halfH] = this.view.halfExtents(1);
     let need = 1;
-    for (const [x, z, height] of [[me.x, me.z, 2.1], [boss.x, boss.z, boss.kind === 'likho' ? 3.2 : 3.2]]) {
+    const inFrame = [[me.x, me.z, 2.1], [boss.x, boss.z, 3.2]];
+    // Вставшая избушка — самая большая в кадре.
+    if (boss.hut?.active) inFrame.push([boss.hut.x, boss.hut.z, 8.5]);
+    for (const [x, z, height] of inFrame) {
       const sx = Math.abs(x - tx) + 1.2;
       const feet = (z - tz) * SIN, head = feet + height;
       // Сверху — полоса здоровья босса, снизу — панель богатыря: запас больше.
       const sy = Math.max(head + 1.4, -feet + 1.6);
       need = Math.max(need, sx / halfW, sy / halfH);
     }
-    return [tx, tz, Math.min(1.5, need)];
+    // Вставшая избушка огромна: камере можно отъехать дальше, чтобы крыша оставалась в кадре.
+    return [tx, tz, Math.min(boss.hut?.active ? 2 : 1.5, need)];
   }
 
   updateEntities(dt) {

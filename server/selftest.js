@@ -44,7 +44,7 @@ const timeout = 240000;
 await new Promise((done) => {
   const check = setInterval(() => {
     const won = log.some((l) => l.startsWith('Победа'));
-    const backOnMap = won && game.state === 'map';
+    const backOnMap = won && game.state !== 'arena'; // после первой победы над Ягой — таверна, иначе карта
     if (backOnMap || Date.now() - started > timeout) { clearInterval(check); done(); }
   }, 200);
 });
@@ -55,5 +55,5 @@ rmSync(progressFile, { force: true });
 
 const won = log.some((l) => l.startsWith('Победа'));
 console.log(`\nснимков у ботов: ${bots.map((b) => b.snaps()).join(', ')}, ошибок: ${errors.length}`);
-console.log(won && game.state === 'map' && !errors.length ? 'ПРОЙДЕНО: бой до победы, возврат на карту' : 'ПРОВАЛ');
+console.log(won && game.state !== 'arena' && !errors.length ? `ПРОЙДЕНО: бой до победы, возврат: ${game.state}` : 'ПРОВАЛ');
 process.exit(won && !errors.length ? 0 : 1);

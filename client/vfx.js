@@ -83,7 +83,7 @@ export class Vfx {
   }
 }
 
-const TOSS_COLORS = { salt: '#f4f1ea', peas: '#b5c95a', coals: '#ff7a2a' };
+const TOSS_COLORS = { salt: '#f4f1ea', peas: '#b5c95a', coals: '#ff7a2a', comb: '#a9794a', towel: '#e9e0cf', bread: '#8a5a2e' };
 
 function drawLine(view, i, t) {
   const ctx = view.ctx;
