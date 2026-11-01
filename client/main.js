@@ -340,9 +340,6 @@ play.onclick = async () => {
 };
 if (new URLSearchParams(location.search).has('autojoin')) play.click();
 
-// Cmd+W браузер отменить не даёт: если карта зажата, он хотя бы спросит, прежде чем закрыть вкладку с игрой.
-addEventListener('beforeunload', (e) => { if (game.input.cardHeld) e.preventDefault(); });
-
 let last = performance.now();
 function loop(time) {
   const dt = Math.max(0, Math.min(0.05, (time - last) / 1000));

@@ -11,18 +11,18 @@ export const ACTIONS = [
 ];
 
 const IS_MAC = /mac/i.test(navigator.userAgentData?.platform ?? navigator.platform ?? '');
-/** Модификаторы: карта держится на Cmd (Mac) или Alt (остальные). */
+/** Модификаторы: карта держится на Alt (на Mac это Option). */
 const MODIFIERS = ['AltLeft', 'AltRight', 'MetaLeft', 'MetaRight'];
 
 export const DEFAULT_BINDINGS = {
   up: ['KeyW', 'ArrowUp'], down: ['KeyS', 'ArrowDown'], left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'],
-  light: ['Mouse0'], heavy: ['Mouse2'], card: IS_MAC ? ['MetaLeft', 'MetaRight'] : ['AltLeft', 'AltRight'],
+  light: ['Mouse0'], heavy: ['Mouse2'], card: ['AltLeft', 'AltRight'],
   dash: ['Space'], parry: ['KeyV'], ability: ['KeyQ'], magic: ['KeyR'], interact: ['KeyF'],
   back: ['Escape', 'Backspace'], help: ['F1'], debug: ['F3', 'Backquote'],
 };
 
 /** Прежние кнопки по умолчанию: если игрок их не менял, сохранённое заменяется новыми. */
-const OLD_DEFAULTS = { card: ['ShiftLeft', 'ShiftRight'], interact: ['KeyE'] };
+const OLD_DEFAULTS = { card: ['ShiftLeft,ShiftRight', 'MetaLeft,MetaRight'], interact: ['KeyE'] };
 
 /** Как показать кнопку игроку. */
 export function keyName(code) {
@@ -44,7 +44,7 @@ export class Input {
     this.pressed = new Set();
     this.mouseX = 0; this.mouseY = 0;
     this.enabled = true;
-    /** Игра началась: сочетания браузера с Alt и Cmd больше не должны срабатывать. */
+    /** Игра началась: сочетания браузера с Alt (и с Cmd, если он назначен) больше не должны срабатывать. */
     this.playing = false;
     this.capture = null;
     this.bindings = this.load();
@@ -82,9 +82,10 @@ export class Input {
     addEventListener('contextmenu', (e) => { if (e.target === canvas || this.capture) e.preventDefault(); });
   }
 
-  /** Нажатие в игре с зажатым Alt или Cmd — не сочетание браузера (Cmd+Shift оставлены: жёсткая перезагрузка и т.п.). */
+  /** Нажатие в игре с зажатым Alt (или назначенным Cmd) — не сочетание браузера. С Shift оставлены: жёсткая перезагрузка и т.п. */
   blocksShortcut(e) {
-    return this.playing && !e.shiftKey && (e.altKey || e.metaKey || MODIFIERS.includes(e.code));
+    const metaBound = ACTIONS.some(([action]) => this.bindings[action].some((c) => c?.startsWith('Meta')));
+    return this.playing && !e.shiftKey && (e.altKey || (e.metaKey && metaBound) || e.code.startsWith('Alt') || (metaBound && e.code.startsWith('Meta')));
   }
 
   load() {
@@ -92,7 +93,7 @@ export class Input {
     try {
       const saved = JSON.parse(localStorage.getItem(STORAGE)) ?? {};
       for (const [action] of ACTIONS) {
-        if (!Array.isArray(saved[action]) || String(saved[action]) === String(OLD_DEFAULTS[action])) continue;
+        if (!Array.isArray(saved[action]) || OLD_DEFAULTS[action]?.includes(String(saved[action]))) continue;
         bindings[action] = saved[action].slice(0, 2);
       }
     } catch { /* настройки нет или хранилище недоступно */ }
