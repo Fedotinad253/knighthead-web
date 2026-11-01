@@ -129,24 +129,24 @@ export const MAGIC = {
     description: 'Через миг в точку под курсором бьёт молния. От неё не спрячешься в укрытии, а кусты сгорают.' },
   decoy: { name: 'Морок', icon: 'items/magic/decoy.png', cooldown: 20, range: 8, duration: 6,
     description: 'Морок-двойник богатыря: пока он не рассеется, враг нападает на него.' },
-  water: { name: 'Живая вода', cooldown: 25, heal: 40, range: 0,
+  water: { name: 'Живая вода', icon: 'items/magic/water.png', cooldown: 25, heal: 40, range: 0,
     description: 'Глоток живой воды возвращает 40 здоровья.' },
 };
 
 /** Обереги — пассивные свойства на весь бой. */
 export const CHARMS = {
-  chicken: { name: 'Куриный бог', unique: 0, description: 'Камень с дыркой: сквозь него видно спрятавшееся Лихо и любые капканы.' },
-  belt: { name: 'Пояс с наузами', description: 'Раз за бой смертельный удар рвёт пояс, а богатырь остаётся жив.' },
-  bear: { name: 'Медвежий коготь', description: 'Удары по уставшему, оглушённому или обессилевшему врагу — в полтора раза сильнее.' },
-  wolf: { name: 'Волчий клык', description: 'Когда здоровья меньше половины, атаки на треть быстрее.' },
+  chicken: { name: 'Куриный бог', icon: 'items/charm/chicken.png', unique: 0, description: 'Камень с дыркой: сквозь него видно спрятавшееся Лихо и любые капканы.' },
+  belt: { name: 'Пояс с наузами', icon: 'items/charm/belt.png', description: 'Раз за бой смертельный удар рвёт пояс, а богатырь остаётся жив.' },
+  bear: { name: 'Медвежий коготь', icon: 'items/charm/bear.png', description: 'Удары по уставшему, оглушённому или обессилевшему врагу — в полтора раза сильнее.' },
+  wolf: { name: 'Волчий клык', icon: 'items/charm/wolf.png', description: 'Когда здоровья меньше половины, атаки на треть быстрее.' },
 };
 
 /** Проклятия — по желанию, от нуля до трёх. Каждое делает бой труднее и даёт очко прокачки (смотри RANKS). */
 export const CURSES = {
-  cataract: { name: 'Бельмо', description: 'Богатырь плохо видит: всё, что дальше нескольких шагов, тонет во тьме.' },
-  wicked: { name: 'Злое Лихо', unique: 0, description: 'Выпады и броски Лиха на половину дальше.' },
-  crooked: { name: 'Кривая доля', unique: 0, description: 'Неудачи от проклятия Лиха случаются вдвое чаще.' },
-  hiddenTraps: { name: 'Невидимые капканы', unique: 0, description: 'Капканы Лиха видно, только когда подошёл к ним вплотную.' },
+  cataract: { name: 'Бельмо', icon: 'items/curse/cataract.png', description: 'Богатырь плохо видит: всё, что дальше нескольких шагов, тонет во тьме.' },
+  wicked: { name: 'Злое Лихо', icon: 'items/curse/wicked.png', unique: 0, description: 'Выпады и броски Лиха на половину дальше.' },
+  crooked: { name: 'Кривая доля', icon: 'items/curse/crooked.png', unique: 0, description: 'Неудачи от проклятия Лиха случаются вдвое чаще.' },
+  hiddenTraps: { name: 'Невидимые капканы', icon: 'items/curse/hiddenTraps.png', unique: 0, description: 'Капканы Лиха видно, только когда подошёл к ним вплотную.' },
 };
 
 /**
