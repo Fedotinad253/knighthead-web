@@ -300,7 +300,7 @@ export class LocalPlayer {
 
   get magicReady() { return !!this.me?.magic && (this.me.magicCooldown ?? 0) <= 0 && this.now >= (this.magicSentAt ?? 0) + 0.3; }
 
-  /** Q — бросить способность под курсор (серп срезает ближайший куст сам). R — магия в сторону курсора. */
+  /** Q — бросить способность под курсор (серп срезает ближайший куст сам). E — магия в сторону курсора. */
   updateAbility() {
     if (this.game.input.magicPressed && !this.rolling && this.magicReady) {
       const [mx, mz] = this.game.view.unproject(this.game.input.mouseX, this.game.input.mouseY);

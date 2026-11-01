@@ -17,12 +17,12 @@ const MODIFIERS = ['AltLeft', 'AltRight', 'MetaLeft', 'MetaRight'];
 export const DEFAULT_BINDINGS = {
   up: ['KeyW', 'ArrowUp'], down: ['KeyS', 'ArrowDown'], left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'],
   light: ['Mouse0'], heavy: ['Mouse2'], card: ['ShiftLeft', 'ShiftRight'],
-  dash: ['Space'], parry: ['KeyV'], ability: ['KeyQ'], magic: ['KeyR'], interact: ['KeyF'],
+  dash: ['Space'], parry: ['KeyV'], ability: ['KeyQ'], magic: ['KeyE'], interact: ['KeyF'],
   back: ['Escape', 'Backspace'], help: ['F1'], debug: ['F3', 'Backquote'],
 };
 
 /** Прежние кнопки по умолчанию: если игрок их не менял, сохранённое заменяется новыми. */
-const OLD_DEFAULTS = { card: ['AltLeft,AltRight', 'MetaLeft,MetaRight'], interact: ['KeyE'] };
+const OLD_DEFAULTS = { card: ['AltLeft,AltRight', 'MetaLeft,MetaRight'], interact: ['KeyE'], magic: ['KeyR'] };
 
 /** Как показать кнопку игроку. */
 export function keyName(code) {

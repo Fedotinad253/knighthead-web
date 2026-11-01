@@ -278,7 +278,7 @@ export class Game {
       charms: pick(pools.charms), curses: pick(pools.curses) };
   }
 
-  /** Магия (R): ветер — конусом в сторону курсора, искра и морок — в точку, живая вода — на себя. */
+  /** Магия: ветер — конусом в сторону курсора, искра и морок — в точку, живая вода — на себя. */
   useMagic(player, m) {
     const id = player.magic, spell = MAGIC[id], now = this.clock.now;
     if (!spell || this.state !== SESSION.ARENA || player.downed || now < player.magicReadyAt || !this.boss) return;
