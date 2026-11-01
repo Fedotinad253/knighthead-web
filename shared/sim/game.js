@@ -651,9 +651,10 @@ export class Game {
     this.broadcast({ t: 'tele', id, shape: 'circle', x, z, r, duration, color });
     return id;
   }
-  telegraphLine(x, z, dx, dz, length, width, duration) {
+  /** color: 'danger' — красная полоса, 'parry' — розовая: эту атаку можно парировать. */
+  telegraphLine(x, z, dx, dz, length, width, duration, color = 'danger') {
     const id = this.nextId++;
-    this.broadcast({ t: 'tele', id, shape: 'line', x, z, dx, dz, length, width, duration, color: 'danger' });
+    this.broadcast({ t: 'tele', id, shape: 'line', x, z, dx, dz, length, width, duration, color });
     return id;
   }
   cancelTelegraph(id) { this.broadcast({ t: 'teleCancel', id }); }

@@ -279,7 +279,7 @@ export class Yaga {
     const a = Math.atan2(target.x, target.z) + rand(-0.5, 0.5);
     const sx = Math.sin(a) * P.fenceRadius, sz = Math.cos(a) * P.fenceRadius;
     const [dx, dz] = norm(target.x - sx, target.z - sz);
-    this.game.telegraphLine(sx, sz, dx, dz, 8, 1.2, this.tele(0.55));
+    this.game.telegraphLine(sx, sz, dx, dz, 8, 1.2, this.tele(0.55), 'parry');
     this.game.flash(sx, sz, 0.8);
     yield* this.wait(this.tele(0.55));
     const count = this.d.extra ? 5 : 3;
@@ -415,7 +415,7 @@ export class Yaga {
   *peck(target) {
     const hut = this.hut;
     const [dx, dz] = norm(target.x - hut.x, target.z - hut.z);
-    this.game.telegraphLine(hut.x, hut.z, dx, dz, P.peckRange + 1, 1.1, this.tele(0.4));
+    this.game.telegraphLine(hut.x, hut.z, dx, dz, P.peckRange + 1, 1.1, this.tele(0.4), 'parry');
     yield* this.wait(this.tele(0.4));
     this.game.fireEnemy(hut.x + dx * 2, hut.z + dz * 2, dx, dz, 22, P.peckDamage, true, 0.3, 0.8, 'peck');
     yield* this.wait(0.4);

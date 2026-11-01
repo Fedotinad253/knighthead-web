@@ -393,7 +393,7 @@ export class Likho {
     this.pose = 'Rise';
     const [dx, dz] = norm(target.x - this.x, target.z - this.z);
     this.face(dx, dz);
-    this.game.telegraphLine(this.x, this.z, dx, dz, 9, 1.2, this.tele(0.7));
+    this.game.telegraphLine(this.x, this.z, dx, dz, 9, 1.2, this.tele(0.7), 'parry');
     yield* this.wait(this.tele(0.7), false);
 
     // Веер снарядов, средний можно парировать.

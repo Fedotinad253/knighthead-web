@@ -142,8 +142,10 @@ function drawLine(view, i, t) {
     ctx.fillStyle = fill; ctx.fill();
     if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = view.s * 0.05; ctx.stroke(); }
   };
-  poly(corners(i.length), 'rgba(255,60,30,0.16)', 'rgba(255,80,40,0.85)');
-  poly(corners(i.length * t), 'rgba(255,60,30,0.38)');
+  // Парируемая атака — розовая, остальные — красные.
+  const [fill, edge] = i.color === 'parry' ? ['255,89,199', '255,120,215'] : ['255,60,30', '255,80,40'];
+  poly(corners(i.length), `rgba(${fill},0.16)`, `rgba(${edge},0.85)`);
+  poly(corners(i.length * t), `rgba(${fill},0.38)`);
 }
 
 function drawArc(view, i, t) {
