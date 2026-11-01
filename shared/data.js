@@ -9,11 +9,11 @@ export const stepDuration = (s) => s.windup + s.active + s.recovery;
 /**
  * Оружие (классов нет — стиль боя задаёт оружие). У каждого: лёгкое комбо, тяжёлая атака,
  * карта + лёгкая = особое комбо (больше всего урона), карта + тяжёлая = мгновенный сильный удар.
- * sprite — картинка; grip — где её держит кулак (доли картинки, y=0 — низ); height — высота, м.
+ * sprite — картинка; grip — где её держит кулак (доли картинки, y=0 — низ); height — высота, м; description — подсказка при выборе.
  */
 export const WEAPONS = [
   {
-    name: 'Меч', sprite: 'weapons/Sword.png', grip: [0.5, 0.85], height: 1.05, comboWindow: 0.45, moveWhileAttacking: 0.7,
+    name: 'Меч', description: 'Ближний бой. Быстрые ровные удары, можно двигаться на ходу.', sprite: 'weapons/Sword.png', grip: [0.5, 0.85], height: 1.05, comboWindow: 0.45, moveWhileAttacking: 0.7,
     light: [melee(12, 0.06, 0.08, 0.14, 2.3, 120), melee(12, 0.06, 0.08, 0.14, 2.3, 120), melee(20, 0.10, 0.10, 0.25, 2.5, 150)],
     heavy: melee(35, 0.35, 0.10, 0.35, 2.8, 60),
     cardCombo: [melee(20, 0.04, 0.06, 0.08, 2.5, 140), melee(20, 0.04, 0.06, 0.08, 2.5, 140), melee(25, 0.04, 0.06, 0.08, 2.5, 140),
@@ -21,7 +21,7 @@ export const WEAPONS = [
     cardStrike: melee(90, 0.02, 0.08, 0.30, 3.2, 90),
   },
   {
-    name: 'Топор', sprite: 'weapons/Axe.png', grip: [0.29, 0.22], height: 0.95, comboWindow: 0.55, moveWhileAttacking: 0.55,
+    name: 'Топор', description: 'Ближний бой. Медленнее меча, зато бьёт сильнее и шире.', sprite: 'weapons/Axe.png', grip: [0.29, 0.22], height: 0.95, comboWindow: 0.55, moveWhileAttacking: 0.55,
     light: [melee(18, 0.12, 0.10, 0.22, 2.4, 140), melee(26, 0.16, 0.10, 0.32, 2.6, 160)],
     heavy: melee(50, 0.50, 0.12, 0.45, 2.8, 180),
     cardCombo: [melee(30, 0.08, 0.08, 0.12, 2.6, 160), melee(35, 0.08, 0.08, 0.12, 2.6, 160), melee(40, 0.10, 0.08, 0.15, 2.6, 200),
@@ -29,14 +29,14 @@ export const WEAPONS = [
     cardStrike: melee(110, 0.02, 0.10, 0.35, 3.0, 120),
   },
   {
-    name: 'Булава', sprite: 'weapons/Mace.png', grip: [0.5, 0.2], height: 0.9, comboWindow: 0.5, moveWhileAttacking: 0.5,
+    name: 'Булава', description: 'Ближний бой. Самая медленная, тяжёлый удар бьёт вокруг себя.', sprite: 'weapons/Mace.png', grip: [0.5, 0.2], height: 0.9, comboWindow: 0.5, moveWhileAttacking: 0.5,
     light: [melee(15, 0.10, 0.10, 0.25, 2.3, 110), melee(15, 0.10, 0.10, 0.25, 2.3, 110), melee(28, 0.18, 0.12, 0.35, 2.8, 70)],
     heavy: melee(60, 0.55, 0.15, 0.50, 3.2, 360),
     cardCombo: [melee(50, 0.15, 0.12, 0.20, 3.5, 360), melee(55, 0.15, 0.12, 0.20, 3.5, 360), melee(75, 0.25, 0.15, 0.50, 4.0, 360)],
     cardStrike: melee(120, 0.02, 0.12, 0.40, 3.2, 100),
   },
   {
-    name: 'Лук', sprite: 'weapons/Bow.png', grip: [0.22, 0.5], height: 1.35, comboWindow: 0.3, moveWhileAttacking: 0.85,
+    name: 'Лук', description: 'Дальний бой. Частые слабые выстрелы, сильный — пробивает насквозь.', sprite: 'weapons/Bow.png', grip: [0.22, 0.5], height: 1.35, comboWindow: 0.3, moveWhileAttacking: 0.85,
     light: [shot(9, 0.05, 0.20, 30, { lifetime: 0.9 })],
     heavy: shot(35, 0.45, 0.30, 40, { pierce: true, lifetime: 1.2 }),
     cardCombo: [shot(10, 0.06, 0.12, 32, { count: 5, spread: 30, lifetime: 0.8 }), shot(10, 0.06, 0.12, 32, { count: 5, spread: 30, lifetime: 0.8 }),
@@ -44,7 +44,7 @@ export const WEAPONS = [
     cardStrike: shot(100, 0.05, 0.30, 50, { pierce: true, lifetime: 1.5 }),
   },
   {
-    name: 'Арбалет', sprite: 'weapons/Crossbow.png', grip: [0.38, 0.45], height: 0.42, comboWindow: 0.3, moveWhileAttacking: 0.7,
+    name: 'Арбалет', description: 'Дальний бой. Редкие сильные болты, тяжёлый выстрел — тремя сразу.', sprite: 'weapons/Crossbow.png', grip: [0.38, 0.45], height: 0.42, comboWindow: 0.3, moveWhileAttacking: 0.7,
     light: [shot(20, 0.08, 0.45, 38)],
     heavy: shot(14, 0.40, 0.40, 34, { count: 3, spread: 20 }),
     cardCombo: Array.from({ length: 6 }, (_, i) => shot(25, 0.03, i === 5 ? 0.30 : 0.07, 40)),
@@ -75,12 +75,12 @@ export const WORLDS = [
 
 /**
  * Боссы. Порядок — индексы на карте и в сохранении. kind: 'likho' или 'dummy' (Чучело-заглушка).
- * par — за сколько секунд бой считается быстрым (для рейтинга). pools — из чего выпадает снаряжение перед боем:
+ * par — за сколько секунд бой считается быстрым (для рейтинга). mark — значок на особых предметах этого босса. pools — из чего выпадает снаряжение перед боем:
  * под каждого босса только то, что в этом бою полезно (у Лиха — только ближний бой).
  */
 const DUMMY_POOLS = { weapons: [0, 1, 2, 3, 4], abilities: ['peas', 'coals'], magic: ['spark', 'water'], charms: ['belt', 'wolf'], curses: ['cataract'] };
 export const BOSSES = [
-  { name: 'Лихо Одноглазое', world: 0, description: 'Хитрое и скрытное. Нападает из кустов', kind: 'likho', arena: 'forest', par: 150,
+  { name: 'Лихо Одноглазое', world: 0, description: 'Хитрое и скрытное. Нападает из кустов', kind: 'likho', arena: 'forest', par: 150, mark: 'characters/likho/eye.png',
     pools: { weapons: [0, 1, 2], abilities: ['salt', 'peas', 'sickle', 'coals'], magic: ['wind', 'spark', 'decoy', 'water'], charms: ['chicken', 'belt', 'bear', 'wolf'],
       curses: ['cataract', 'wicked', 'crooked', 'hiddenTraps'] } },
   { name: 'Соловей-Разбойник', world: 0, description: '', kind: 'dummy', arena: 'arena', par: 60, pools: DUMMY_POOLS },
@@ -107,34 +107,35 @@ export const DIFFICULTIES = [
 
 /**
  * Бытовая способность (кнопка Q). Бросок — в точку под курсором (не дальше range). cooldown — секунды.
- * icon — картинка для карточки и панели боя (в assets/); нет — карточка без картинки.
+ * icon — картинка для карточки и панели боя (в assets/); нет — вместо неё буква.
+ * unique — номер босса, для которого предмет сделан особо (значок в углу картинки). Без него предмет общий: в описании только общие слова.
  */
 export const ABILITIES = {
   salt: { name: 'Соль', icon: 'items/ability/salt.png', cooldown: 10, range: 9, radius: 1.8, duration: 6,
-    description: 'Соляной круг: нечисть его не переступает. Брошенная в укрытие — выгоняет Лихо оттуда.' },
+    description: 'Соляной круг: нечисть его не переступает. Брошенная в укрытие — выгоняет оттуда.' },
   peas: { name: 'Горсть гороха', icon: 'items/ability/peas.png', cooldown: 8, range: 10, radius: 2, duration: 8,
-    description: 'Рассыпанный горох: враг на нём еле ползёт. Слепое Лихо бежит на стук горошин.' },
-  sickle: { name: 'Серп', icon: 'items/ability/sickle.png', cooldown: 6, range: 3.2, radius: 1.4, duration: 0, damage: 25,
+    description: 'Рассыпанный горох: враг на нём еле ползёт. Кто не видит — бежит на стук горошин.' },
+  sickle: { name: 'Серп', icon: 'items/ability/sickle.png', unique: 0, cooldown: 6, range: 3.2, radius: 1.4, duration: 0, damage: 25,
     description: 'Срезает ближайший куст до конца боя — Лиху негде прятаться. Сидело в нём — получит по лапам.' },
   coals: { name: 'Горшок с углями', icon: 'items/ability/coals.png', cooldown: 12, range: 9, radius: 1.9, duration: 5, damage: 18,
-    description: 'Горящие угли жгут врага, а куст в огне сгорает — вместе с тем, кто в нём прятался.' },
+    description: 'Горящие угли жгут врага, а кусты в огне сгорают — вместе с теми, кто в них прятался.' },
 };
 
 /** Магия (кнопка R) — заговоры и чары: сильнее бытовой, но перезаряжается дольше. */
 export const MAGIC = {
   wind: { name: 'Ветер-ветрило', icon: 'items/magic/wind.png', cooldown: 14, range: 6, arc: 70, push: 4,
-    description: 'Порыв ветра из ладоней отбрасывает врага и выдувает Лихо из куста.' },
+    description: 'Порыв ветра из ладоней отбрасывает врага и выдувает его из укрытия.' },
   spark: { name: 'Перунова искра', icon: 'items/magic/spark.png', cooldown: 16, range: 10, radius: 1.6, delay: 0.6, damage: 55,
-    description: 'Через миг в точку под курсором бьёт молния. Куст от неё сгорает.' },
+    description: 'Через миг в точку под курсором бьёт молния. Кусты от неё сгорают.' },
   decoy: { name: 'Морок', icon: 'items/magic/decoy.png', cooldown: 20, range: 8, duration: 6,
-    description: 'Морок-двойник богатыря: Лихо бросается, кидает и ставит капканы на него.' },
+    description: 'Морок-двойник богатыря: пока он не рассеется, враг нападает на него.' },
   water: { name: 'Живая вода', cooldown: 25, heal: 40, range: 0,
     description: 'Глоток живой воды возвращает 40 здоровья.' },
 };
 
 /** Обереги — пассивные свойства на весь бой. */
 export const CHARMS = {
-  chicken: { name: 'Куриный бог', description: 'Камень с дыркой: сквозь него видно спрятавшееся Лихо и любые капканы.' },
+  chicken: { name: 'Куриный бог', unique: 0, description: 'Камень с дыркой: сквозь него видно спрятавшееся Лихо и любые капканы.' },
   belt: { name: 'Пояс с наузами', description: 'Раз за бой смертельный удар рвёт пояс, а богатырь остаётся жив.' },
   bear: { name: 'Медвежий коготь', description: 'Удары по уставшему, оглушённому или обессилевшему врагу — в полтора раза сильнее.' },
   wolf: { name: 'Волчий клык', description: 'Когда здоровья меньше половины, атаки на треть быстрее.' },
@@ -143,9 +144,9 @@ export const CHARMS = {
 /** Проклятия — по желанию, от нуля до трёх. Каждое делает бой труднее и даёт очко прокачки (смотри RANKS). */
 export const CURSES = {
   cataract: { name: 'Бельмо', description: 'Богатырь плохо видит: всё, что дальше нескольких шагов, тонет во тьме.' },
-  wicked: { name: 'Злое Лихо', description: 'Выпады и броски Лиха на половину дальше.' },
-  crooked: { name: 'Кривая доля', description: 'Проклятие несчастья бьёт вдвое чаще.' },
-  hiddenTraps: { name: 'Невидимые капканы', description: 'Капканы видно, только когда подошёл к ним вплотную.' },
+  wicked: { name: 'Злое Лихо', unique: 0, description: 'Выпады и броски Лиха на половину дальше.' },
+  crooked: { name: 'Кривая доля', unique: 0, description: 'Неудачи от проклятия Лиха случаются вдвое чаще.' },
+  hiddenTraps: { name: 'Невидимые капканы', unique: 0, description: 'Капканы Лиха видно, только когда подошёл к ним вплотную.' },
 };
 
 /**

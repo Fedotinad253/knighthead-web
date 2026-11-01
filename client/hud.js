@@ -274,7 +274,7 @@ export class Hud {
     const offer = session?.offer;
     const choosing = session?.state === SESSION.ARENA && session.preparing && offer;
     $('loadout').hidden = !choosing;
-    if (!choosing) { this.loadoutKey = ''; this.pick = null; return; }
+    if (!choosing) { this.loadoutKey = ''; this.pick = null; $('loadout-tip').hidden = true; return; }
     const key = JSON.stringify(offer);
     if (key === this.loadoutKey) return;
     this.loadoutKey = key;
@@ -283,28 +283,58 @@ export class Hud {
     this.renderLoadout();
   }
 
+  /** Карточки снаряжения: картинка и название; описание — во всплывающей подсказке при наведении. */
   renderLoadout() {
     const offer = this.game.session.offer, pick = this.pick;
-    const card = (cls, picked, data, name, text, icon, iconClass = '') => icon
-      ? `<button class="choice has-icon ${cls}${picked ? ' picked' : ''}" ${data}><img class="choice-icon ${iconClass}" src="${iconUrl(icon)}" alt=""><span><b>${name}</b>${text}</span></button>`
-      : `<button class="choice ${cls}${picked ? ' picked' : ''}" ${data}><b>${name}</b>${text}</button>`;
-    $('loadout-weapons').innerHTML = offer.weapons.map((w) =>
-      card('', pick.weapon === w, `data-weapon="${w}"`, WEAPONS[w].name, WEAPONS[w].light[0].projectile ? 'Дальний бой' : 'Ближний бой', WEAPONS[w].sprite, 'weapon')).join('');
-    $('loadout-abilities').innerHTML = offer.abilities.map((a) => card('', pick.ability === a, `data-ability="${a}"`, ABILITIES[a].name, ABILITIES[a].description, ABILITIES[a].icon)).join('');
-    $('loadout-magic').innerHTML = offer.magic.map((a) => card('', pick.magic === a, `data-magic="${a}"`, MAGIC[a].name, MAGIC[a].description, MAGIC[a].icon)).join('');
-    $('loadout-charms').innerHTML = offer.charms.map((c) => card('', pick.charm === c, `data-charm="${c}"`, CHARMS[c].name, CHARMS[c].description)).join('');
-    $('loadout-curses').innerHTML = offer.curses.map((c) => card('curse', pick.curses.has(c), `data-curse="${c}"`, CURSES[c].name, CURSES[c].description)).join('');
+    const fill = (id, list, field, item, iconClass = '', cls = '') => {
+      $(id).innerHTML = list.map((key) => {
+        const it = item(key), boss = BOSSES[it.unique];
+        const pic = it.icon ? `<img class="choice-icon ${iconClass}" src="${iconUrl(it.icon)}" alt="">` : `<span class="choice-letter">${it.name[0]}</span>`;
+        const mark = boss?.mark ? `<img class="unique-mark" src="${iconUrl(boss.mark)}" alt="Особый предмет">` : '';
+        return `<button class="choice item ${cls}" data-${field}="${key}"><span class="choice-pic">${pic}${mark}</span><b>${it.name}</b></button>`;
+      }).join('');
+      for (const button of $(id).children) {
+        const key = button.dataset[field], it = item(key);
+        button.onpointerenter = button.onfocus = () => this.showTip(button, it);
+        button.onpointerleave = button.onblur = () => { $('loadout-tip').hidden = true; };
+        button.onclick = () => {
+          if (field === 'curse') { if (pick.curses.has(key)) pick.curses.delete(key); else pick.curses.add(key); }
+          else pick[field] = field === 'weapon' ? Number(key) : key;
+          this.markPicked();
+        };
+      }
+    };
+    const weapon = (w) => ({ name: WEAPONS[w].name, description: WEAPONS[w].description, icon: WEAPONS[w].sprite });
+    fill('loadout-weapons', offer.weapons, 'weapon', weapon, 'weapon');
+    fill('loadout-abilities', offer.abilities, 'ability', (a) => ABILITIES[a]);
+    fill('loadout-magic', offer.magic, 'magic', (a) => MAGIC[a]);
+    fill('loadout-charms', offer.charms, 'charm', (c) => CHARMS[c]);
+    fill('loadout-curses', offer.curses, 'curse', (c) => CURSES[c], '', 'curse');
+    this.markPicked();
+  }
+
+  /** Подсветить выбранное. Карточки не перестраиваются — подсказка и наведение не сбиваются. */
+  markPicked() {
+    const pick = this.pick;
+    for (const button of document.querySelectorAll('#loadout .choice')) {
+      const d = button.dataset;
+      const picked = d.weapon !== undefined ? pick.weapon === Number(d.weapon)
+        : d.ability ? pick.ability === d.ability : d.magic ? pick.magic === d.magic : d.charm ? pick.charm === d.charm : pick.curses.has(d.curse);
+      button.classList.toggle('picked', picked);
+    }
     const n = pick.curses.size;
     $('loadout-summary').textContent = n ? `Проклятий: ${n}. Засчитаются за рейтинг: D — 1, C и B — до 2, A и выше — до 3.` : 'Без проклятий.';
+  }
 
-    for (const button of document.querySelectorAll('#loadout .choice')) button.onclick = () => {
-      const d = button.dataset;
-      if (d.weapon !== undefined) pick.weapon = Number(d.weapon);
-      if (d.ability) pick.ability = d.ability;
-      if (d.magic) pick.magic = d.magic;
-      if (d.charm) pick.charm = d.charm;
-      if (d.curse) { if (pick.curses.has(d.curse)) pick.curses.delete(d.curse); else pick.curses.add(d.curse); }
-      this.renderLoadout();
-    };
+  /** Подсказка над карточкой (не влезает — под ней), в пределах экрана. */
+  showTip(button, item) {
+    const tip = $('loadout-tip');
+    $('tip-name').textContent = item.name;
+    $('tip-text').textContent = item.description;
+    $('tip-unique').textContent = BOSSES[item.unique] ? `Особый предмет: ${BOSSES[item.unique].name}` : '';
+    tip.hidden = false;
+    const r = button.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight;
+    tip.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2))}px`;
+    tip.style.top = `${r.top - h - 6 >= 8 ? r.top - h - 6 : Math.min(innerHeight - h - 8, r.bottom + 6)}px`;
   }
 }
