@@ -62,7 +62,8 @@ export class MapView {
     MAP.nodes.forEach(([x, z], i) => {
       const boss = BOSSES[i - 1];
       const open = i === 0 || unlocked(boss.world);
-      const color = i === 0 ? '#d9b373' : open ? ['#f2cc4d', '#9a4de6', '#80ccff'][boss.world] : '#555';
+      // Логово Яги — вне миров, свой цвет.
+      const color = i === 0 ? '#d9b373' : !open ? '#555' : ['#f2cc4d', '#9a4de6', '#80ccff'][boss.world] ?? '#c2553a';
       view.groundEllipse(x, z, 1.2, 1.2, shade(color, 0.7));
       view.groundEllipse(x, z, 1.0, 1.0, color);
       if (i > 0 && results[i - 1] >= 0) view.groundEllipse(x, z, 0.45, 0.45, '#fff2b3');

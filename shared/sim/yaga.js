@@ -14,7 +14,7 @@ const P = {
   dustLife: 3, sniffTime: 1.2, sniffMoved: 1.5, sniffDamage: 15,
   hutSpeed: 4, hutRunSpeed: 13, hutRadius: 2.6, stompRadius: 2.4, stompDamage: 18, runDamage: 20, peckDamage: 12, peckRange: 4.5,
   legHits: 3, fallWindow: 4,
-  riderSpeed: 20, riderDamage: 14, fireDamage: 8, darkTime: 4,
+  riderSpeed: 13, riderDamage: 14, fireDamage: 8, darkTime: 4,
   shovelSpeed: 12, shovelDamage: 30, struggle: 6,
   fireLife: 4, stoveFireDamage: 10,
   dashSpeed: 14, dashDamage: 14, restWindow: 2,
@@ -165,6 +165,21 @@ export class Yaga {
     this.tasks.start((function* () { yield* action; yield* self.fight(); })());
   }
 
+  /**
+   * Следующая атака: случайно, но каждая встретится и одна и та же не пойдёт два раза подряд.
+   * first — с какой атаки начать первый раз.
+   */
+  nextAttack(name, attacks, first = null) {
+    const bag = (this.bags ??= {})[name] ??= { left: first ? [first] : [], last: null };
+    if (!bag.left.length) {
+      bag.left = [...attacks];
+      for (let i = bag.left.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [bag.left[i], bag.left[j]] = [bag.left[j], bag.left[i]]; }
+      if (bag.left.length > 1 && bag.left[bag.left.length - 1] === bag.last) bag.left.reverse();
+    }
+    bag.last = bag.left.pop();
+    return bag.last;
+  }
+
   *wait(seconds) {
     const end = this.now + seconds;
     while (this.now < end && !this.dead) yield;
@@ -207,11 +222,7 @@ export class Yaga {
     this.airborne = true;
     yield* this.hover();
     if (this.atFloor) return;
-    const roll = this.nextAir = ((this.nextAir ?? -1) + 1) % 4;
-    if (roll === 0) yield* this.dive();
-    else if (roll === 1) yield* this.bones();
-    else if (roll === 2) yield* this.broom();
-    else yield* this.sniff();
+    yield* this[this.nextAttack('air', ['dive', 'bones', 'broom', 'sniff'])]();
   }
 
   *hover() {
@@ -341,11 +352,9 @@ export class Yaga {
     yield* this.wait(0.7 / this.d.attackSpeed);
     if (this.atFloor) return;
     const distance = Math.hypot(target.x - hut.x, target.z - hut.z);
-    if (distance < P.peckRange && Math.random() < 0.6) { yield* this.peck(target); return; }
-    const roll = this.nextHut = ((this.nextHut ?? -1) + 1) % 3;
-    if (roll === 0) yield* this.stomp(target);
-    else if (roll === 1) yield* this.run(target);
-    else yield* this.riders(target);
+    if (distance < P.peckRange && Math.random() < 0.35) { yield* this.peck(target); return; }
+    // Первыми в этой фазе выезжают всадники.
+    yield* this[this.nextAttack('hut', ['stomp', 'run', 'riders'], 'riders')](target);
   }
 
   stepHut(dx, dz, distance) {
@@ -415,28 +424,33 @@ export class Yaga {
   /** Три всадника: белый бьёт, красный оставляет огненный след, после чёрного темнеет. */
   *riders(target) {
     const rounds = this.d.extra ? 2 : 1;
+    const R = this.scene.bounds.r;
+    this.game.announce('Три всадника!');
     for (let round = 0; round < rounds; round++) {
       for (const kind of ['rider_white', 'rider_red', 'rider_black']) {
         if (this.dead) return;
+        // Въезжает через забор на одном краю поляны и уезжает через другой, по полосе через богатыря.
         const a = Math.random() * Math.PI * 2, dx = Math.sin(a), dz = Math.cos(a);
-        const sx = target.x - dx * 16, sz = target.z - dz * 16;
-        this.game.telegraphLine(sx, sz, dx, dz, 32, 2.2, this.tele(0.8));
+        const b = target.x * dx + target.z * dz, root = Math.sqrt(Math.max(0, b * b - (target.x * target.x + target.z * target.z - R * R)));
+        const behind = b + root, length = behind + root - b;
+        const sx = target.x - dx * behind, sz = target.z - dz * behind;
+        this.game.telegraphLine(sx, sz, dx, dz, length, 2.2, this.tele(0.8));
         yield* this.wait(this.tele(0.8));
-        const speed = P.riderSpeed, life = 32 / speed;
+        const speed = P.riderSpeed, life = length / speed;
         this.game.spawnWide(sx, sz, dx, dz, speed, 1.1, P.riderDamage, life, kind);
-        if (kind === 'rider_red') this.tasks.start(this.fireTrail(sx, sz, dx, dz, speed));
+        if (kind === 'rider_red') this.tasks.start(this.fireTrail(sx, sz, dx, dz, speed, life));
         if (kind === 'rider_black') {
           const game = this.game;
-          this.tasks.start((function* () { yield 1; game.darkUntil = game.clock.now + P.darkTime; })());
+          this.tasks.start((function* () { yield life * 0.6; game.darkUntil = game.clock.now + P.darkTime; })());
         }
-        yield* this.wait(0.5);
+        yield* this.wait(0.7);
       }
     }
   }
 
-  *fireTrail(sx, sz, dx, dz, speed) {
+  *fireTrail(sx, sz, dx, dz, speed, duration) {
     const start = this.now, life = (this.has('hungry') ? 2 : 1) * 3;
-    while (!this.dead && this.now - start < 1.6) {
+    while (!this.dead && this.now - start < duration) {
       const t = (this.now - start) * speed, x = sx + dx * t, z = sz + dz * t;
       if (Math.hypot(x, z) < this.scene.bossRadius) this.game.spawnZone(x, z, 0.9, 'fire', life, P.fireDamage);
       yield 0.12;
@@ -520,11 +534,7 @@ export class Yaga {
     this.pose = 'Stand';
     yield* this.wait(P.pause / this.d.attackSpeed);
     if (this.atFloor) return;
-    const roll = this.nextStove = ((this.nextStove ?? -1) + 1) % 4;
-    if (roll === 0) yield* this.shovel();
-    else if (roll === 1) yield* this.ovenFire();
-    else if (roll === 2) yield* this.dash();
-    else yield* this.geese();
+    yield* this[this.nextAttack('stove', ['shovel', 'ovenFire', 'dash', 'geese'])]();
   }
 
   /** Лопата едет по полосе и тащит пойманного в печь. */

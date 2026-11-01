@@ -369,7 +369,8 @@ export class LocalPlayer {
       game.view.shake(0.15, 0.2, this.now);
       blip('hurt');
       if (h.stun > 0) this.stun(h.stun);
-      if (h.type === 'proj') game.removeHazardLocally(h.id);
+      // Снаряд гаснет от удара, а всадник скачет дальше.
+      if (h.type === 'proj' && !h.keep) game.removeHazardLocally(h.id);
     }
   }
 
