@@ -39,26 +39,33 @@ export function drawStars(view, x, z, y, now) {
   drawFlat(view, 'likho/fx_stars.png', px, py, 1.4, Math.sin(now * 3) * 0.15);
 }
 
-const patterns = new Map();
+const baked = new Map();
+/** Сколько пикселей на метр в заранее нарисованной земле. */
+const GROUND_DENSITY = 40;
 
-/** Земля из повторяющегося рисунка в круге радиуса r; один повтор — meters метров. False, если рисунок ещё не загружен. */
+/**
+ * Земля из повторяющегося рисунка в круге радиуса r; один повтор — meters метров. False, если рисунок ещё не загружен.
+ * Собирать её из плитки каждый кадр дорого, поэтому круг рисуется один раз, потом только копируется.
+ */
 export function drawGroundTile(view, path, r, meters) {
   const image = assets.image(path);
   if (!image?.naturalWidth) return false;
-  const ctx = view.ctx, s = view.s;
+  let canvas = baked.get(path);
+  if (!canvas) {
+    canvas = document.createElement('canvas');
+    canvas.width = Math.ceil(r * 2 * GROUND_DENSITY);
+    canvas.height = Math.ceil(r * 2 * SIN * GROUND_DENSITY);
+    const bake = canvas.getContext('2d');
+    bake.beginPath();
+    bake.ellipse(canvas.width / 2, canvas.height / 2, canvas.width / 2, canvas.height / 2, 0, 0, Math.PI * 2);
+    bake.clip();
+    const tileW = meters * GROUND_DENSITY, tileH = tileW * SIN;
+    for (let x = 0; x < canvas.width; x += tileW) for (let y = 0; y < canvas.height; y += tileH) bake.drawImage(image, x, y, tileW, tileH);
+    baked.set(path, canvas);
+  }
   const [px, py] = view.project(0, 0);
-  let pattern = patterns.get(path);
-  if (!pattern) { pattern = ctx.createPattern(image, 'repeat'); patterns.set(path, pattern); }
-  ctx.save();
-  ctx.beginPath();
-  ctx.ellipse(px, py, r * s, r * SIN * s, 0, 0, Math.PI * 2);
-  ctx.clip();
-  ctx.translate(px, py);
-  ctx.scale(s * meters / image.naturalWidth, s * SIN * meters / image.naturalHeight);
-  const reach = (r * 1.1 / meters) * image.naturalWidth;
-  ctx.fillStyle = pattern;
-  ctx.fillRect(-reach, -reach, reach * 2, reach * 2);
-  ctx.restore();
+  const w = r * 2 * view.s, h = r * 2 * SIN * view.s;
+  view.ctx.drawImage(canvas, px - w / 2, py - h / 2, w, h);
   return true;
 }
 

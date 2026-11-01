@@ -176,8 +176,11 @@ export class View {
   lighting(ambient, lights, tint, now) {
     if (ambient >= 0.99 && !lights.length) return;
     const ctx = this.ctx;
-    if (!this.lightCanvas || this.lightCanvas.width !== this.w || this.lightCanvas.height !== this.h) {
-      this.lightCanvas = new OffscreenCanvasShim(this.w, this.h);
+    // Свет мягкий: считаем его в половинном разрешении, разницы не видно, а кадр заметно быстрее.
+    const lw = Math.ceil(this.w / 2), lh = Math.ceil(this.h / 2);
+    if (!this.lightCanvas || this.lightCanvas.width !== lw || this.lightCanvas.height !== lh) {
+      this.lightCanvas = new OffscreenCanvasShim(lw, lh);
+      this.lightCanvas.ctx.scale(0.5, 0.5);
     }
     const lc = this.lightCanvas.ctx;
     lc.globalCompositeOperation = 'source-over';
@@ -195,7 +198,7 @@ export class View {
       lc.fillStyle = g;
       lc.fillRect(px - r, py - r, r * 2, r * 2);
     }
-    ctx.drawImage(this.lightCanvas.canvas, 0, 0);
+    ctx.drawImage(this.lightCanvas.canvas, 0, 0, this.w, this.h);
 
     // Цветной отсвет источников.
     ctx.save();
