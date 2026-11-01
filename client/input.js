@@ -10,18 +10,26 @@ export const ACTIONS = [
   ['back', 'Назад'], ['help', 'Управление'], ['debug', 'Отладка'],
 ];
 
+const IS_MAC = /mac/i.test(navigator.userAgentData?.platform ?? navigator.platform ?? '');
+/** Модификаторы: карта держится на Cmd (Mac) или Alt (остальные). */
+const MODIFIERS = ['AltLeft', 'AltRight', 'MetaLeft', 'MetaRight'];
+
 export const DEFAULT_BINDINGS = {
   up: ['KeyW', 'ArrowUp'], down: ['KeyS', 'ArrowDown'], left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'],
-  light: ['Mouse0'], heavy: ['Mouse2'], card: ['ShiftLeft', 'ShiftRight'],
-  dash: ['Space'], parry: ['KeyV'], ability: ['KeyQ'], magic: ['KeyR'], interact: ['KeyE'],
+  light: ['Mouse0'], heavy: ['Mouse2'], card: IS_MAC ? ['MetaLeft', 'MetaRight'] : ['AltLeft', 'AltRight'],
+  dash: ['Space'], parry: ['KeyV'], ability: ['KeyQ'], magic: ['KeyR'], interact: ['KeyF'],
   back: ['Escape', 'Backspace'], help: ['F1'], debug: ['F3', 'Backquote'],
 };
+
+/** Прежние кнопки по умолчанию: если игрок их не менял, сохранённое заменяется новыми. */
+const OLD_DEFAULTS = { card: ['ShiftLeft', 'ShiftRight'], interact: ['KeyE'] };
 
 /** Как показать кнопку игроку. */
 export function keyName(code) {
   if (!code) return '—';
   const names = { Mouse0: 'ЛКМ', Mouse1: 'Колесо', Mouse2: 'ПКМ', Mouse3: 'Мышь 4 (назад)', Mouse4: 'Мышь 5 (вперёд)', Space: 'Пробел', ShiftLeft: 'Shift', ShiftRight: 'Правый Shift',
-    ControlLeft: 'Ctrl', ControlRight: 'Правый Ctrl', AltLeft: 'Alt', AltRight: 'Правый Alt', Escape: 'Esc', Backspace: 'Backspace',
+    ControlLeft: 'Ctrl', ControlRight: 'Правый Ctrl', AltLeft: IS_MAC ? 'Option' : 'Alt', AltRight: IS_MAC ? 'Правый Option' : 'Правый Alt',
+    MetaLeft: IS_MAC ? 'Cmd' : 'Win', MetaRight: IS_MAC ? 'Правый Cmd' : 'Правый Win', Escape: 'Esc', Backspace: 'Backspace',
     Enter: 'Enter', Tab: 'Tab', ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Backquote: '`', CapsLock: 'CapsLock' };
   if (names[code]) return names[code];
   if (code.startsWith('Key')) return code.slice(3);
@@ -36,6 +44,8 @@ export class Input {
     this.pressed = new Set();
     this.mouseX = 0; this.mouseY = 0;
     this.enabled = true;
+    /** Игра началась: сочетания браузера с Alt и Cmd больше не должны срабатывать. */
+    this.playing = false;
     this.capture = null;
     this.bindings = this.load();
 
@@ -45,11 +55,19 @@ export class Input {
       this.pressed.add(code);
     };
     addEventListener('keydown', (e) => {
-      if (this.capture || ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'F1', 'F3', 'Tab'].includes(e.code)) e.preventDefault();
-      if (e.repeat) return;
+      if (this.capture || ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'F1', 'F3', 'Tab'].includes(e.code) || this.blocksShortcut(e)) e.preventDefault();
+      // Автоповтор возвращает удержанную клавишу, если её сбросили при отпускании Cmd.
+      if (e.repeat) { if (!this.capture) this.down.add(e.code); return; }
       press(e.code);
     });
-    addEventListener('keyup', (e) => this.down.delete(e.code));
+    addEventListener('keyup', (e) => {
+      if (this.playing && MODIFIERS.includes(e.code)) e.preventDefault(); // одиночный Alt не открывает меню браузера
+      this.down.delete(e.code);
+      // Пока Cmd зажат, macOS не присылает отпускание других клавиш — иначе они «залипнут».
+      if (e.code === 'MetaLeft' || e.code === 'MetaRight') {
+        for (const code of [...this.down]) if (!code.startsWith('Mouse') && !MODIFIERS.includes(code)) this.down.delete(code);
+      }
+    });
     addEventListener('blur', () => this.down.clear());
     canvas.addEventListener('mousemove', (e) => {
       const r = canvas.getBoundingClientRect();
@@ -64,11 +82,19 @@ export class Input {
     addEventListener('contextmenu', (e) => { if (e.target === canvas || this.capture) e.preventDefault(); });
   }
 
+  /** Нажатие в игре с зажатым Alt или Cmd — не сочетание браузера (Cmd+Shift оставлены: жёсткая перезагрузка и т.п.). */
+  blocksShortcut(e) {
+    return this.playing && !e.shiftKey && (e.altKey || e.metaKey || MODIFIERS.includes(e.code));
+  }
+
   load() {
     const bindings = structuredClone(DEFAULT_BINDINGS);
     try {
       const saved = JSON.parse(localStorage.getItem(STORAGE)) ?? {};
-      for (const [action] of ACTIONS) if (Array.isArray(saved[action])) bindings[action] = saved[action].slice(0, 2);
+      for (const [action] of ACTIONS) {
+        if (!Array.isArray(saved[action]) || String(saved[action]) === String(OLD_DEFAULTS[action])) continue;
+        bindings[action] = saved[action].slice(0, 2);
+      }
     } catch { /* настройки нет или хранилище недоступно */ }
     return bindings;
   }

@@ -381,7 +381,7 @@ export class LocalPlayer {
     for (const [key, time] of this.processed) if (this.now - time > 5) this.processed.delete(key);
   }
 
-  // ---------------------------------------------------------------- Взаимодействие (E)
+  // ---------------------------------------------------------------- Взаимодействие
 
   updateInteract(dt, locked) {
     const game = this.game, input = game.input, me = this.me;
@@ -389,7 +389,7 @@ export class LocalPlayer {
     this.reviveTarget = null;
     if (locked || me.downed) { this.reviveProgress = 0; return; }
 
-    // Упавший напарник рядом — поднять, удерживая E.
+    // Упавший напарник рядом — поднять, удерживая взаимодействие.
     const downed = game.players.find((p) => p.id !== me.id && p.downed && Math.hypot(p.x - this.x, p.z - this.z) <= P.reviveRadius);
     if (downed) {
       this.reviveTarget = downed;

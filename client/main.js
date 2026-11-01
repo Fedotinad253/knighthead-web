@@ -57,6 +57,7 @@ class Game {
 
   /** Одиночная игра в самой странице. */
   startLocal() {
+    this.input.playing = true;
     this.world = new LocalWorld((m) => this.receive(m));
   }
 
@@ -338,6 +339,9 @@ play.onclick = async () => {
   game.startLocal();
 };
 if (new URLSearchParams(location.search).has('autojoin')) play.click();
+
+// Cmd+W браузер отменить не даёт: если карта зажата, он хотя бы спросит, прежде чем закрыть вкладку с игрой.
+addEventListener('beforeunload', (e) => { if (game.input.cardHeld) e.preventDefault(); });
 
 let last = performance.now();
 function loop(time) {

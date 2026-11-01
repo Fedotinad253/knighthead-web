@@ -2,7 +2,7 @@
 // Фаза 1 «Из кустов»: прячется в кусте или за дубом, выглядывает (горит глаз), выпад по красной полосе,
 // выдыхается на 3–4 с и убегает в другое укрытие. Переход: рёв и проклятие несчастья.
 // Фаза 2 «Ползучее»: ползёт за богатырём, бьёт когтями вблизи, кидается и ставит капканы.
-// Конец фазы 2: падает без сил — добивание по E (сценка: глаз выколот).
+// Конец фазы 2: падает без сил — добивание кнопкой взаимодействия (сценка: глаз выколот).
 // Фаза 3 «Слепое бешенство»: мечется, врезается в деревья и оглушается, машет руками вокруг себя.
 import { Tasks } from './tasks.js';
 import { Health } from './health.js';
@@ -432,7 +432,7 @@ export class Likho {
     this.health.invulnerable = true;
     this.pose = 'Exhausted';
     this.finisherReady = true;
-    this.game.announce('Лихо обессилело! Подойди и нажми E');
+    this.game.announce('Лихо обессилело! Выколи ему глаз!');
 
     const autoAt = this.now + 3, riseAt = this.now + P.finisherWindow;
     let warned = false;
@@ -482,7 +482,7 @@ export class Likho {
     return true;
   }
 
-  /** Игрок нажал E над обессилевшим Лихом. */
+  /** Игрок нажал взаимодействие над обессилевшим Лихом. */
   startFinisher(player) {
     if (this.finisherReady && !this.finisher && Math.hypot(player.x - this.x, player.z - this.z) < 3.2 * 1.5) this.finisher = player;
   }

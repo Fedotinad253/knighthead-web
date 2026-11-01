@@ -191,7 +191,7 @@ export function resolveCollisions(scene, x, z, radius, extra = []) {
   return [x, z];
 }
 
-/** Ближайший предмет для «E» в радиусе (или null). */
+/** Ближайший предмет для взаимодействия в радиусе (или null). */
 export function nearestInteractable(scene, x, z) {
   let best = null, bestDistance = Infinity;
   for (const item of scene.interactables ?? []) {

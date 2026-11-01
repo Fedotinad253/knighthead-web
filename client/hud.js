@@ -1,4 +1,4 @@
-// Интерфейс поверх игры (HTML): здоровье и карты, напарник, полоса босса, объявления, подсказка «E»,
+// Интерфейс поверх игры (HTML): здоровье и карты, напарник, полоса босса, объявления, подсказка взаимодействия,
 // диалог с NPC, камень на распутье (сложность и снаряжение перед боем), итоги боя, прогресс миров на карте, подсказка управления.
 import { WEAPONS, BOSSES, DIFFICULTIES, WORLDS, CARDS, PLAYER, SESSION, ABILITIES, MAGIC, CHARMS, CURSES, RANKS } from '../shared/data.js';
 import { MAP, nodeNear } from '../shared/scenes.js';
@@ -87,13 +87,15 @@ export class Hud {
     this.announceUntil = this.game.now + 2.6;
   }
 
-  /** Реплика NPC: E — следующая, Esc — закрыть. */
+  /** Реплика NPC: взаимодействие — следующая, «назад» — закрыть. */
   dialogue(item) {
     const index = this.dialogueIndex[item.id] ?? 0;
     this.dialogueItem = item;
     this.dialogueIndex[item.id] = (index + 1) % item.lines.length;
     $('dialogue-speaker').textContent = item.speaker;
     $('dialogue-text').textContent = item.lines[index];
+    const bindings = this.game.input.bindings;
+    $('dialogue-hint').textContent = `${keyName(bindings.interact[0])} — дальше, ${keyName(bindings.back[0])} — закрыть`;
     $('dialogue').hidden = false;
   }
 
@@ -140,7 +142,7 @@ export class Hud {
       if (input.hitAlways('help')) this.toggle('controls');
       if (input.hitAlways('debug')) this.toggle('debug');
       if (!$('controls').hidden && input.hitAlways('back')) this.toggle('controls', false);
-      // Итоги боя закрываются по Esc или E — и это нажатие больше никуда не идёт.
+      // Итоги боя закрываются «назад» или взаимодействием — и это нажатие больше никуда не идёт.
       if (!$('result').hidden && (input.hitAlways('back') || input.hitAlways('interact'))) {
         $('result').hidden = true;
         for (const c of [...input.bindings.back, ...input.bindings.interact]) input.pressed.delete(c);
