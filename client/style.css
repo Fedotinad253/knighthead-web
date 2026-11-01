@@ -66,18 +66,23 @@ canvas#game { position: fixed; inset: 0; width: 100vw; height: 100vh; display: b
 #loadout { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(900px, 96vw); max-height: 96vh; overflow: auto;
   background: rgba(20, 14, 10, 0.9); border: 1px solid var(--edge); border-radius: 14px; padding: 14px 22px; box-shadow: 0 20px 60px rgba(0,0,0,0.6); }
 #loadout-title { font-size: 26px; color: var(--gold); font-weight: 700; text-align: center; text-shadow: 0 2px 4px #000; }
-#loadout h3 { margin: 10px 0 4px; font-size: 16px; color: var(--gold); text-align: left; text-shadow: 0 1px 2px #000; }
+#loadout h3 { margin: 6px 0 3px; font-size: 16px; color: var(--gold); text-align: left; text-shadow: 0 1px 2px #000; }
 .choice-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 #stone-difficulty { grid-template-columns: repeat(2, 1fr); }
-.choice { text-align: left; padding: 8px 12px; border-radius: 8px; cursor: pointer; background: rgba(0,0,0,0.25); border: 2px solid rgba(0,0,0,0.35);
+.choice { text-align: left; padding: 6px 12px; border-radius: 8px; cursor: pointer; background: rgba(0,0,0,0.25); border: 2px solid rgba(0,0,0,0.35);
   color: var(--ink); font: inherit; font-size: 13px; line-height: 1.3; }
 .choice b { display: block; font-size: 16px; color: #fff; margin-bottom: 2px; }
+.choice.has-icon { display: flex; align-items: center; gap: 10px; }
+.choice-icon { flex: none; width: 52px; height: 52px; object-fit: contain; pointer-events: none; }
+.choice-icon.weapon { transform: rotate(45deg) scale(1.25); }
 .choice:hover { border-color: var(--edge); }
 .choice.picked { border-color: var(--gold); background: rgba(255, 217, 102, 0.16); box-shadow: 0 0 10px rgba(255, 217, 102, 0.35); }
 .choice.curse.picked { border-color: #d973ff; background: rgba(170, 70, 220, 0.2); box-shadow: 0 0 10px rgba(217, 115, 255, 0.4); }
 #loadout-summary { margin: 10px 0 8px; min-height: 1.3em; text-align: center; }
 #gear { margin-top: 6px; }
-#gear-ability.off, #gear-magic.off { opacity: 0.45; }
+.gear-line { display: flex; align-items: center; gap: 6px; min-height: 18px; }
+.gear-line img { width: 24px; height: 24px; object-fit: contain; }
+.gear-line.off { opacity: 0.45; }
 #boss-curses { color: #d9a3ff; text-shadow: 0 1px 3px #000; }
 #result { text-align: center; width: min(520px, 94vw); }
 #result-title { font-size: 26px; color: var(--gold); font-weight: 700; margin-top: 6px; }

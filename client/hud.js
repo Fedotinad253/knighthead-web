@@ -6,6 +6,7 @@ import { ACTIONS, keyName } from './input.js';
 import { getVolume, setVolume, unlockAudio, blip } from './assets.js';
 
 const $ = (id) => document.getElementById(id);
+const iconUrl = (path) => new URL(`../assets/${path}`, import.meta.url).href;
 const PHASES = { likho: ['Из кустов', 'Ползучее', 'Слепое бешенство'] };
 
 export class Hud {
@@ -98,6 +99,15 @@ export class Hud {
 
   get dialogueOpen() { return !$('dialogue').hidden; }
 
+  /** Картинка на панели боя: меняется, только когда сменился предмет (панель обновляется каждый кадр). */
+  setIcon(id, path = '') {
+    const el = $(id);
+    if (el.dataset.path === path) return;
+    el.dataset.path = path;
+    el.hidden = !path;
+    if (path) el.src = iconUrl(path);
+  }
+
   /** Итоги боя: рейтинг, из чего он сложился, очки прокачки и монеты. */
   showResult(m) {
     const rank = RANKS[m.rank];
@@ -169,10 +179,12 @@ export class Hud {
       $('gear').hidden = !ability && !magic && !charm;
       const magicCooldown = me.magicCooldown ?? 0;
       $('gear-magic').textContent = magic ? `${keyName(input.bindings.magic[0])} — ${magic.name}${magicCooldown > 0 ? `: ${Math.ceil(magicCooldown)} с` : ''}` : '';
-      $('gear-magic').classList.toggle('off', magicCooldown > 0);
+      $('gear-magic').parentElement.classList.toggle('off', magicCooldown > 0);
+      this.setIcon('gear-ability-icon', ability?.icon);
+      this.setIcon('gear-magic-icon', magic?.icon);
       const cooldown = me.abilityCooldown ?? 0;
       $('gear-ability').textContent = ability ? `${keyName(input.bindings.ability[0])} — ${ability.name}${cooldown > 0 ? `: ${Math.ceil(cooldown)} с` : ''}` : '';
-      $('gear-ability').classList.toggle('off', cooldown > 0);
+      $('gear-ability').parentElement.classList.toggle('off', cooldown > 0);
       $('gear-charm').textContent = charm ? `Оберег: ${charm.name}${me.charm === 'belt' && me.beltUsed ? ' (порван)' : ''}` : '';
     }
 
@@ -273,12 +285,13 @@ export class Hud {
 
   renderLoadout() {
     const offer = this.game.session.offer, pick = this.pick;
-    const card = (cls, picked, data, name, text) =>
-      `<button class="choice ${cls}${picked ? ' picked' : ''}" ${data}><b>${name}</b>${text}</button>`;
+    const card = (cls, picked, data, name, text, icon, iconClass = '') => icon
+      ? `<button class="choice has-icon ${cls}${picked ? ' picked' : ''}" ${data}><img class="choice-icon ${iconClass}" src="${iconUrl(icon)}" alt=""><span><b>${name}</b>${text}</span></button>`
+      : `<button class="choice ${cls}${picked ? ' picked' : ''}" ${data}><b>${name}</b>${text}</button>`;
     $('loadout-weapons').innerHTML = offer.weapons.map((w) =>
-      card('', pick.weapon === w, `data-weapon="${w}"`, WEAPONS[w].name, WEAPONS[w].light[0].projectile ? 'Дальний бой' : 'Ближний бой')).join('');
-    $('loadout-abilities').innerHTML = offer.abilities.map((a) => card('', pick.ability === a, `data-ability="${a}"`, ABILITIES[a].name, ABILITIES[a].description)).join('');
-    $('loadout-magic').innerHTML = offer.magic.map((a) => card('', pick.magic === a, `data-magic="${a}"`, MAGIC[a].name, MAGIC[a].description)).join('');
+      card('', pick.weapon === w, `data-weapon="${w}"`, WEAPONS[w].name, WEAPONS[w].light[0].projectile ? 'Дальний бой' : 'Ближний бой', WEAPONS[w].sprite, 'weapon')).join('');
+    $('loadout-abilities').innerHTML = offer.abilities.map((a) => card('', pick.ability === a, `data-ability="${a}"`, ABILITIES[a].name, ABILITIES[a].description, ABILITIES[a].icon)).join('');
+    $('loadout-magic').innerHTML = offer.magic.map((a) => card('', pick.magic === a, `data-magic="${a}"`, MAGIC[a].name, MAGIC[a].description, MAGIC[a].icon)).join('');
     $('loadout-charms').innerHTML = offer.charms.map((c) => card('', pick.charm === c, `data-charm="${c}"`, CHARMS[c].name, CHARMS[c].description)).join('');
     $('loadout-curses').innerHTML = offer.curses.map((c) => card('curse', pick.curses.has(c), `data-curse="${c}"`, CURSES[c].name, CURSES[c].description)).join('');
     const n = pick.curses.size;

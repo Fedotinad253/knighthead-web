@@ -107,25 +107,26 @@ export const DIFFICULTIES = [
 
 /**
  * Бытовая способность (кнопка Q). Бросок — в точку под курсором (не дальше range). cooldown — секунды.
+ * icon — картинка для карточки и панели боя (в assets/); нет — карточка без картинки.
  */
 export const ABILITIES = {
-  salt: { name: 'Соль', cooldown: 10, range: 9, radius: 1.8, duration: 6,
+  salt: { name: 'Соль', icon: 'items/ability/salt.png', cooldown: 10, range: 9, radius: 1.8, duration: 6,
     description: 'Соляной круг: нечисть его не переступает. Брошенная в укрытие — выгоняет Лихо оттуда.' },
-  peas: { name: 'Горсть гороха', cooldown: 8, range: 10, radius: 2, duration: 8,
+  peas: { name: 'Горсть гороха', icon: 'items/ability/peas.png', cooldown: 8, range: 10, radius: 2, duration: 8,
     description: 'Рассыпанный горох: враг на нём еле ползёт. Слепое Лихо бежит на стук горошин.' },
-  sickle: { name: 'Серп', cooldown: 6, range: 3.2, radius: 1.4, duration: 0, damage: 25,
+  sickle: { name: 'Серп', icon: 'items/ability/sickle.png', cooldown: 6, range: 3.2, radius: 1.4, duration: 0, damage: 25,
     description: 'Срезает ближайший куст до конца боя — Лиху негде прятаться. Сидело в нём — получит по лапам.' },
-  coals: { name: 'Горшок с углями', cooldown: 12, range: 9, radius: 1.9, duration: 5, damage: 18,
+  coals: { name: 'Горшок с углями', icon: 'items/ability/coals.png', cooldown: 12, range: 9, radius: 1.9, duration: 5, damage: 18,
     description: 'Горящие угли жгут врага, а куст в огне сгорает — вместе с тем, кто в нём прятался.' },
 };
 
 /** Магия (кнопка R) — заговоры и чары: сильнее бытовой, но перезаряжается дольше. */
 export const MAGIC = {
-  wind: { name: 'Ветер-ветрило', cooldown: 14, range: 6, arc: 70, push: 4,
+  wind: { name: 'Ветер-ветрило', icon: 'items/magic/wind.png', cooldown: 14, range: 6, arc: 70, push: 4,
     description: 'Порыв ветра из ладоней отбрасывает врага и выдувает Лихо из куста.' },
-  spark: { name: 'Перунова искра', cooldown: 16, range: 10, radius: 1.6, delay: 0.6, damage: 55,
+  spark: { name: 'Перунова искра', icon: 'items/magic/spark.png', cooldown: 16, range: 10, radius: 1.6, delay: 0.6, damage: 55,
     description: 'Через миг в точку под курсором бьёт молния. Куст от неё сгорает.' },
-  decoy: { name: 'Морок', cooldown: 20, range: 8, duration: 6,
+  decoy: { name: 'Морок', icon: 'items/magic/decoy.png', cooldown: 20, range: 8, duration: 6,
     description: 'Морок-двойник богатыря: Лихо бросается, кидает и ставит капканы на него.' },
   water: { name: 'Живая вода', cooldown: 25, heal: 40, range: 0,
     description: 'Глоток живой воды возвращает 40 здоровья.' },
