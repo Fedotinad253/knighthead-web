@@ -324,6 +324,26 @@ class Game {
 
 // ---------------------------------------------------------------- Запуск
 
+/**
+ * Браузер кэширует страницу и скрипты отдельно: после обновления сайта новый скрипт может попасть на старую страницу,
+ * где нет новых элементов. Сверяемся со свежей страницей и один раз перезагружаемся. Возвращает true, если перезагрузка пошла.
+ */
+async function reloadIfPageStale() {
+  const KEY = 'knighthead.staleReload';
+  try {
+    const html = await (await fetch(location.href, { cache: 'no-cache' })).text();
+    const fresh = new DOMParser().parseFromString(html, 'text/html');
+    const stale = [...fresh.querySelectorAll('[id]')].some((el) => !document.getElementById(el.id));
+    if (!stale) { sessionStorage.removeItem(KEY); return false; }
+    if (sessionStorage.getItem(KEY)) return false; // уже пробовали — не зацикливаемся
+    sessionStorage.setItem(KEY, '1');
+    location.reload();
+    return true;
+  } catch { return false; } // нет сети или хранилища — играем с тем, что есть
+}
+
+if (await reloadIfPageStale()) await new Promise(() => {});
+
 const game = new Game();
 window.knighthead = game;
 const status = document.getElementById('menu-status');
@@ -341,10 +361,15 @@ play.onclick = async () => {
 if (new URLSearchParams(location.search).has('autojoin')) play.click();
 
 let last = performance.now();
+let lastError = '';
 function loop(time) {
   const dt = Math.max(0, Math.min(0.05, (time - last) / 1000));
   last = time;
-  game.frame(dt);
+  // Ошибка в одном кадре не должна навсегда останавливать игру.
+  try { game.frame(dt); } catch (error) {
+    if (error.message !== lastError) { lastError = error.message; console.error(error); }
+    game.input.endFrame();
+  }
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);

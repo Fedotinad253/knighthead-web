@@ -312,10 +312,10 @@ export class Hud {
     fill('loadout-magic', offer.magic, 'magic', (a) => MAGIC[a]);
     fill('loadout-charms', offer.charms, 'charm', (c) => CHARMS[c]);
     fill('loadout-curses', offer.curses, 'curse', (c) => CURSES[c], '', 'curse');
+    this.markPicked();
     const bindings = this.game.input.bindings;
     $('loadout-ability-key').textContent = `(${keyName(bindings.ability[0])})`;
     $('loadout-magic-key').textContent = `(${keyName(bindings.magic[0])})`;
-    this.markPicked();
   }
 
   /** Подсветить выбранное. Карточки не перестраиваются — подсказка и наведение не сбиваются. */
