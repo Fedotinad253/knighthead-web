@@ -11,18 +11,18 @@ export const ACTIONS = [
 ];
 
 const IS_MAC = /mac/i.test(navigator.userAgentData?.platform ?? navigator.platform ?? '');
-/** Модификаторы: карта держится на Alt (на Mac это Option). */
+/** Модификаторы, у которых есть сочетания браузера: в игре они отключаются, только если кнопка назначена. */
 const MODIFIERS = ['AltLeft', 'AltRight', 'MetaLeft', 'MetaRight'];
 
 export const DEFAULT_BINDINGS = {
   up: ['KeyW', 'ArrowUp'], down: ['KeyS', 'ArrowDown'], left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'],
-  light: ['Mouse0'], heavy: ['Mouse2'], card: ['AltLeft', 'AltRight'],
+  light: ['Mouse0'], heavy: ['Mouse2'], card: ['ShiftLeft', 'ShiftRight'],
   dash: ['Space'], parry: ['KeyV'], ability: ['KeyQ'], magic: ['KeyR'], interact: ['KeyF'],
   back: ['Escape', 'Backspace'], help: ['F1'], debug: ['F3', 'Backquote'],
 };
 
 /** Прежние кнопки по умолчанию: если игрок их не менял, сохранённое заменяется новыми. */
-const OLD_DEFAULTS = { card: ['ShiftLeft,ShiftRight', 'MetaLeft,MetaRight'], interact: ['KeyE'] };
+const OLD_DEFAULTS = { card: ['AltLeft,AltRight', 'MetaLeft,MetaRight'], interact: ['KeyE'] };
 
 /** Как показать кнопку игроку. */
 export function keyName(code) {
@@ -44,7 +44,7 @@ export class Input {
     this.pressed = new Set();
     this.mouseX = 0; this.mouseY = 0;
     this.enabled = true;
-    /** Игра началась: сочетания браузера с Alt (и с Cmd, если он назначен) больше не должны срабатывать. */
+    /** Игра началась: сочетания браузера с назначенными Alt и Cmd больше не должны срабатывать. */
     this.playing = false;
     this.capture = null;
     this.bindings = this.load();
@@ -82,10 +82,11 @@ export class Input {
     addEventListener('contextmenu', (e) => { if (e.target === canvas || this.capture) e.preventDefault(); });
   }
 
-  /** Нажатие в игре с зажатым Alt (или назначенным Cmd) — не сочетание браузера. С Shift оставлены: жёсткая перезагрузка и т.п. */
+  /** Нажатие в игре с зажатым назначенным Alt или Cmd — не сочетание браузера. С Shift оставлены: жёсткая перезагрузка и т.п. */
   blocksShortcut(e) {
-    const metaBound = ACTIONS.some(([action]) => this.bindings[action].some((c) => c?.startsWith('Meta')));
-    return this.playing && !e.shiftKey && (e.altKey || (e.metaKey && metaBound) || e.code.startsWith('Alt') || (metaBound && e.code.startsWith('Meta')));
+    if (!this.playing || e.shiftKey) return false;
+    const bound = (prefix) => ACTIONS.some(([action]) => this.bindings[action].some((c) => c?.startsWith(prefix)));
+    return ((e.altKey || e.code.startsWith('Alt')) && bound('Alt')) || ((e.metaKey || e.code.startsWith('Meta')) && bound('Meta'));
   }
 
   load() {
