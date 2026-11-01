@@ -303,8 +303,12 @@ export class Game {
         if (game.state !== SESSION.ARENA || !game.boss) return;
         game.flash(x, z, spell.radius);
         game.shake(0.25, 0.3);
-        for (const i of game.bushesIn(x, z, spell.radius + 0.4)) game.cutBush(i, spell.damage);
-        if (Math.hypot(game.boss.x - x, game.boss.z - z) < spell.radius + (game.boss.radius ?? 0.5)) game.damageBoss(player, spell.damage, false);
+        for (const i of game.bushesIn(x, z, spell.radius + 0.4)) game.cutBush(i, 0);
+        // От молнии укрытие не спасает.
+        if (Math.hypot(game.boss.x - x, game.boss.z - z) < spell.radius + (game.boss.radius ?? 0.5)) {
+          const strike = () => game.damageBoss(player, spell.damage, false);
+          if (game.boss.throughCover) game.boss.throughCover(strike); else strike();
+        }
       })(this));
     } else if (id === 'decoy') {
       this.decoy = { id: 'decoy', x, z, expire: now + spell.duration, downed: false, owner: player.id };

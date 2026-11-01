@@ -126,7 +126,7 @@ export const MAGIC = {
   wind: { name: 'Ветер-ветрило', icon: 'items/magic/wind.png', cooldown: 14, range: 6, arc: 70, push: 4,
     description: 'Порыв ветра из ладоней отбрасывает врага и выдувает его из укрытия.' },
   spark: { name: 'Перунова искра', icon: 'items/magic/spark.png', cooldown: 16, range: 10, radius: 1.6, delay: 0.6, damage: 55,
-    description: 'Через миг в точку под курсором бьёт молния. Кусты от неё сгорают.' },
+    description: 'Через миг в точку под курсором бьёт молния. От неё не спрячешься в укрытии, а кусты сгорают.' },
   decoy: { name: 'Морок', icon: 'items/magic/decoy.png', cooldown: 20, range: 8, duration: 6,
     description: 'Морок-двойник богатыря: пока он не рассеется, враг нападает на него.' },
   water: { name: 'Живая вода', cooldown: 25, heal: 40, range: 0,

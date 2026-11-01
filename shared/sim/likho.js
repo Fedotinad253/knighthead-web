@@ -217,7 +217,18 @@ export class Likho {
     if (!spot.behindTree && this.game.isBushCut(spot.x, spot.z)) return 'Негде спрятаться!';
     if (this.game.effectAt('salt', this.x, this.z, 0.9)) return 'Соль жжёт!';
     if (this.now - (this.blownAt ?? -9) < 0.5) return 'Сдуло ветром!';
+    if (this.now - (this.struckAt ?? -9) < 0.5) return 'Молния!';
     return null;
+  }
+
+  /** Удар, от которого укрытие не спасает: достаёт и в укрытии, и по дороге к нему. Из укрытия Лихо выскакивает. */
+  throughCover(strike) {
+    const hiding = HIDING.has(this.pose), cover = hiding || this.pose === 'Retreat';
+    const invulnerable = this.health.invulnerable;
+    if (cover) this.health.invulnerable = false;
+    strike();
+    if (cover) this.health.invulnerable = invulnerable;
+    if (hiding) this.struckAt = this.now;
   }
 
   /** Ветер-ветрило: попало в конус — отбрасывает от богатыря (сквозь кусты, но не сквозь стволы) и выдувает из укрытия. */
