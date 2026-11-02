@@ -34,6 +34,7 @@ export class LocalPlayer {
     this.nextSend = 0;
     this.nextPickup = 0;
     this.speed = 0;
+    this.dustBlind = 0;
   }
 
   get now() { return this.game.now; }
@@ -105,13 +106,15 @@ export class LocalPlayer {
         const l = Math.hypot(this.vx, this.vz);
         if (l > P.speed) { this.vx *= P.speed / l; this.vz *= P.speed / l; }
         const [mx, mz] = input.move;
-        // В пыли от метлы идти тяжело.
-        const dusty = game.latest?.effects?.some((e) => e.kind === 'dust' && Math.hypot(e.x - this.x, e.z - this.z) < e.r);
-        const speed = (this.attack ? P.speed * this.weapon.moveWhileAttacking : P.speed) * (dusty ? 0.55 : 1);
+        const speed = this.attack ? P.speed * this.weapon.moveWhileAttacking : P.speed;
         this.accelerate(mx * speed, mz * speed, dt);
         if (!this.attack) this.setFacing(...this.aim());
       }
     }
+    // Пыль слепит плавно: зашёл в облако — темнеет, вышел — проясняется.
+    const dusty = game.latest?.effects?.some((e) => e.kind === 'dust' && Math.hypot(e.x - this.x, e.z - this.z) < e.r);
+    this.dustBlind += ((dusty ? 1 : 0) - this.dustBlind) * Math.min(1, dt * (dusty ? 5 : 2.5));
+
     const ox = this.x, oz = this.z;
     let nx = this.x + this.vx * dt, nz = this.z + this.vz * dt;
     const boss = game.boss;

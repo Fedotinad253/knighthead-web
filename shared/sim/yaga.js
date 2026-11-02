@@ -1,5 +1,5 @@
 // Баба-Яга — первый босс игры. Победив её, богатырь забирает избушку.
-// Фаза 1 «Ступа»: летает, пикирует и вязнет в земле, кости с забора, пыль от метлы, «русский дух».
+// Фаза 1 «Ступа»: летает, пикирует и вязнет в земле, кости с забора, облако пыли от метлы.
 // Фаза 2 «Избушка»: Яга на крыше неуязвима, бьётся избушка. У неё своё здоровье: кончилось — падает, Ягу можно бить.
 // Фаза 3 «Печь»: избушка садится, Яга у печи: лопата (тащит в печь), огонь, рывок, гуси-лебеди.
 // Конец: Яга без сил, богатырь говорит заветные слова — сценка, и избушка теперь его.
@@ -11,7 +11,8 @@ const P = {
   hoverRadius: 9, hoverSpeed: 8, pause: 0.9,
   diveSpeed: 18, diveDamage: 15, diveTelegraph: 0.8, stuckWindow: 2,
   boneSpeed: 9, boneDamage: 10,
-  dustLife: 3, sniffTime: 1.5, sniffMoved: 2.5,
+  /** Облако от метлы: начальный радиус, рост в секунду, скорость, сколько живёт. */
+  dustStart: 1.2, dustGrow: 1.5, dustSpeed: 3.5, dustLife: 4,
   hutSpeed: 4, hutRunSpeed: 13, hutRadius: 2.6, stompRadius: 2.4, stompDamage: 18, runDamage: 20, peckDamage: 12, peckRange: 4.5,
   /** Здоровье избушки: кончилось — падает, потом встаёт заново с полным. */
   hutHealth: 300, fallWindow: 3, hutGuard: 2,
@@ -258,7 +259,7 @@ export class Yaga {
     this.airborne = true;
     yield* this.hover();
     if (this.atFloor) return;
-    yield* this[this.nextAttack('air', ['dive', 'bones', 'broom', 'sniff'])]();
+    yield* this[this.nextAttack('air', ['dive', 'bones', 'broom'])]();
   }
 
   *hover() {
@@ -331,34 +332,25 @@ export class Yaga {
     yield* this.wait(0.4);
   }
 
-  /** Метла поднимает пыль: под ней не видно подсказок атак. */
+  /** Метла гонит от Яги облако пыли: оно растёт и ползёт к богатырю. Внутри не видно подсказок атак и плохо видно вокруг. */
   *broom() {
     const target = this.pickTarget();
     if (!target) return;
     this.pose = 'Cast';
-    this.game.floatText(this.x, this.z, 3.2, 'Метёт!', '#d9cfa8', 1);
-    yield* this.wait(this.tele(0.4));
     const [dx, dz] = norm(target.x - this.x, target.z - this.z);
-    const count = this.has('swept') ? 6 : 3;
-    for (let i = 0; i < count; i++) {
-      const offset = (i - (count - 1) / 2) * 3.2;
-      const [x, z] = this.clampToArena(target.x + -dz * offset, target.z + dx * offset);
-      this.game.addEffect('dust', x, z, 2.4, P.dustLife);
+    this.face(dx, dz);
+    this.game.floatText(this.x, this.z, 3.2, 'Метёт!', '#d9cfa8', 1);
+    yield* this.wait(this.tele(0.5));
+    // С проклятием «Заметённые следы» облаков два, веером.
+    const angles = this.has('swept') ? [-28, 28] : [0];
+    for (const angle of angles) {
+      const [fx, fz] = rotate(dx, dz, angle);
+      const cloud = this.game.addEffect('dust', this.x, this.z, P.dustStart, P.dustLife);
+      cloud.vx = fx * P.dustSpeed;
+      cloud.vz = fz * P.dustSpeed;
+      cloud.grow = P.dustGrow;
     }
     yield* this.wait(0.3);
-  }
-
-  /** Чует богатыря: вокруг него сжимается кольцо. Остался на месте — Яга сразу пикирует, ушёл — потеряла след. */
-  *sniff() {
-    const target = this.pickTarget();
-    if (!target) return;
-    this.pose = 'Sniff';
-    const x0 = target.x, z0 = target.z, time = this.tele(P.sniffTime);
-    this.game.send(target, { t: 'sniff', duration: time, moved: P.sniffMoved });
-    yield* this.wait(time);
-    if (this.dead) return;
-    if (Math.hypot(target.x - x0, target.z - z0) < P.sniffMoved) yield* this.diveAt(target, this.tele(0.3));
-    else this.game.floatText(target.x, target.z, 2.8, 'Не учуяла!', '#7be08a', 1);
   }
 
   // ---------------------------------------------------------------- Фаза 2: избушка

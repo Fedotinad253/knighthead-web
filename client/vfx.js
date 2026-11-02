@@ -37,11 +37,6 @@ export class Vfx {
 
   telegraph(m) { this.add({ kind: 'tele', ...m, until: this.now + m.duration }); }
   flash(x, z, r, look = null) { this.add({ kind: 'flash', x, z, r, look, until: this.now + (look ? 0.4 : 0.25) }); }
-  /** Яга чует богатыря: кольцо сжимается вокруг него. Отошёл на moved м — кольцо зелёное, след потерян. */
-  sniff(duration, moved) {
-    const me = this.game.local;
-    this.add({ kind: 'sniff', x0: me.x, z0: me.z, moved, until: this.now + duration });
-  }
   /** Лихо бросает капкан. */
   trapThrow(m) { this.add({ kind: 'trapFly', ...m, until: this.now + m.duration }); }
   /** Капкан захлопнулся: закрытый лежит ещё немного. */
@@ -74,10 +69,6 @@ export class Vfx {
         } else {
           drawLine(view, i, t);
         }
-      } else if (i.kind === 'sniff') {
-        const me = this.game.local, safe = Math.hypot(me.x - i.x0, me.z - i.z0) >= i.moved;
-        const r = 2.4 * (1 - t) + 0.5, rgb = safe ? '123,224,138' : '255,170,50';
-        view.groundEllipse(me.x, me.z, r, r, `rgba(${rgb},0.14)`, `rgba(${rgb},0.95)`, 0.09);
       } else if (i.kind === 'trapClosed') {
         const [px, py] = view.project(i.x, i.z);
         drawCentered(view, `likho/trap_${i.variant ?? 'a'}_closed.png`, px, py, 2.3, 0, Math.min(1, (1 - t) * 3));
@@ -108,9 +99,6 @@ export class Vfx {
         ctx.fillStyle = g;
         ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
-      } else if (i.kind === 'sniff') {
-        const me = this.game.local, safe = Math.hypot(me.x - i.x0, me.z - i.z0) >= i.moved;
-        view.label(me.x, me.z, 2.7, safe ? 'Потеряла след' : 'Яга чует! Беги!', safe ? '#7be08a' : '#ffb84d', 0.5);
       } else if (i.kind === 'flash' && FLASH_IMAGES[i.look]) {
         const [px, py] = view.project(i.x, i.z, i.look === 'claws' ? 1 : 0.2);
         drawCentered(view, FLASH_IMAGES[i.look], px, py, i.r * 2.3 * (0.85 + t * 0.25), 0, 1 - t * t);

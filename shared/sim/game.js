@@ -361,7 +361,9 @@ export class Game {
 
   /** След на земле (пыль Яги и т.п.). */
   addEffect(kind, x, z, r, duration, owner = null) {
-    this.effects.push({ id: this.nextId++, kind, x, z, r, owner, born: this.clock.now, expire: this.clock.now + duration, nextTick: this.clock.now });
+    const effect = { id: this.nextId++, kind, x, z, r, owner, born: this.clock.now, expire: this.clock.now + duration, nextTick: this.clock.now };
+    this.effects.push(effect);
+    return effect;
   }
 
   /** Широкий снаряд врага: всадник, лопата, гусь. Задевает кругом r, а не по очертаниям богатыря. */
@@ -746,15 +748,8 @@ export class Game {
     // Горящие угли жгут босса два раза в секунду.
     this.effects = this.effects.filter((e) => now < e.expire);
     for (const e of this.effects) {
-      // В пыли от метлы богатырь кашляет: понемногу теряет здоровье (и замедляется, это считает его браузер).
-      if (e.kind === 'dust' && now >= e.nextTick) {
-        e.nextTick = now + 0.7;
-        for (const p of this.alivePlayers()) {
-          if (Math.hypot(p.x - e.x, p.z - e.z) >= e.r) continue;
-          this.damagePlayer(p, 4);
-          this.floatText(p.x, p.z, 2.6, 'Кха-кха!', '#d9cfa8', 0.7);
-        }
-      }
+      // Облако пыли ползёт и растёт.
+      if (e.grow) { e.r += e.grow * dt; e.x += e.vx * dt; e.z += e.vz * dt; }
       if (e.kind !== 'coals' || now < e.nextTick || !this.boss) continue;
       e.nextTick = now + 0.5;
       if (!this.boss.airborne && Math.hypot(this.boss.x - e.x, this.boss.z - e.z) < e.r + (this.boss.radius ?? 0.5))
@@ -817,7 +812,7 @@ export class Game {
         ability: p.ability, abilityCooldown: Math.max(0, r2(p.abilityReadyAt - now)), charm: p.charm, beltUsed: p.beltUsed,
         magic: p.magic, magicCooldown: Math.max(0, r2(p.magicReadyAt - now)), dragged: !!p.drag, struggle: p.drag ? p.drag.need - p.drag.presses : 0,
       })),
-      effects: this.effects.map((e) => ({ id: e.id, kind: e.kind, x: r2(e.x), z: r2(e.z), r: e.r, left: r2(e.expire - now) })),
+      effects: this.effects.map((e) => ({ id: e.id, kind: e.kind, x: r2(e.x), z: r2(e.z), r: r2(e.r), left: r2(e.expire - now) })),
       cut: [...this.cutBushes],
       burntBushes: [...this.burntBushes],
       burnt: [...this.burntTrees],

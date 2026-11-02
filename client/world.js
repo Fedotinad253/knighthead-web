@@ -87,6 +87,7 @@ export function drawWorld(game) {
   }
   // Бельмо и темнота после чёрного всадника.
   if (game.session?.curses?.includes('cataract') || game.session?.dark) drawCataract(game);
+  if (game.local?.dustBlind > 0.01) drawCataract(game, '128,112,76', 0.96 * game.local.dustBlind, 2.2, 5.5);
 
   // Подписи и всплывающий текст — поверх света.
   if (scene.id === 'tavern') drawTavernLabels(game);
@@ -456,7 +457,7 @@ function drawEffect(view, e, now) {
     }
     const [dx, dy] = view.project(e.x, e.z, 0.4);
     ctx.globalAlpha = fade;
-    drawFlat(view, 'yaga/fx_dust.png', dx, dy, e.r * 2.6, 0, e.id % 2 === 0);
+    drawFlat(view, 'yaga/fx_dust.png', dx, dy - e.r * 0.25 * view.s, e.r * 2.6, 0, e.id % 2 === 0);
     ctx.globalAlpha = 1;
   } else if (e.kind === 'comb') {
     for (let i = 0; i < 14; i++) {
@@ -496,14 +497,14 @@ function drawEffect(view, e, now) {
   }
 }
 
-/** Проклятие «Бельмо»: дальше нескольких шагов от богатыря — тьма. */
-function drawCataract(game) {
+/** Плохо видно: дальше нескольких шагов от богатыря всё тонет — во тьме («Бельмо», чёрный всадник) или в пыли от метлы. */
+function drawCataract(game, rgb = '6,6,10', strength = 0.93, innerMeters = 4.5, outerMeters = 8.5) {
   const { view } = game, ctx = view.ctx;
   const [px, py] = view.project(game.local.x, game.local.z, 1);
-  const inner = view.s * 4.5, outer = view.s * 8.5;
+  const inner = view.s * innerMeters, outer = view.s * outerMeters;
   const g = ctx.createRadialGradient(px, py, inner, px, py, outer);
-  g.addColorStop(0, 'rgba(6,6,10,0)');
-  g.addColorStop(1, 'rgba(6,6,10,0.93)');
+  g.addColorStop(0, `rgba(${rgb},0)`);
+  g.addColorStop(1, `rgba(${rgb},${strength})`);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, view.w, view.h);
 }
