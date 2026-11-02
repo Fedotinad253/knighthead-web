@@ -28,6 +28,9 @@ const P = {
 /** Позы, в которых Яга открыта для ударов (для Медвежьего когтя). */
 const VULNERABLE = new Set(['Stuck', 'Stunned', 'Tired', 'Exhausted']);
 
+/** Какие кости из пяти парируются (номера по порядку). */
+const BONE_PARRIES = [[2, 4], [1, 3], [4, 5], [1, 5]];
+
 const rand = (a, b) => a + Math.random() * (b - a);
 const norm = (x, z) => { const l = Math.hypot(x, z); return l > 1e-5 ? [x / l, z / l] : [0, 0]; };
 const rotate = (x, z, degrees) => {
@@ -287,13 +290,13 @@ export class Yaga {
     const a = Math.atan2(target.x, target.z) + rand(-0.5, 0.5);
     const sx = Math.sin(a) * P.fenceRadius, sz = Math.cos(a) * P.fenceRadius;
     const [dx, dz] = norm(target.x - sx, target.z - sz);
-    this.game.telegraphLine(sx, sz, dx, dz, 8, 1.2, this.tele(0.55), 'parry');
+    // Череп вспыхивает, и летят кости. Какие парируются, меняется от залпа к залпу: они светятся розовым.
     this.game.flash(sx, sz, 0.8);
-    yield* this.wait(this.tele(0.55));
-    const count = this.d.extra ? 5 : 3;
-    for (let i = 0; i < count; i++) {
-      const [fx, fz] = rotate(dx, dz, (i - (count - 1) / 2) * 14);
-      this.game.fireEnemy(sx, sz, fx, fz, P.boneSpeed * this.d.projectileSpeed, P.boneDamage, i === Math.floor(count / 2), 4, 1.2, 'bone');
+    yield* this.wait(this.tele(0.7));
+    const parried = BONE_PARRIES[Math.floor(Math.random() * BONE_PARRIES.length)];
+    for (let i = 0; i < 5; i++) {
+      const [fx, fz] = rotate(dx, dz, (i - 2) * 11);
+      this.game.fireEnemy(sx, sz, fx, fz, P.boneSpeed * this.d.projectileSpeed, P.boneDamage, parried.includes(i + 1), 4, 1.2, 'bone');
     }
     yield* this.wait(0.4);
   }

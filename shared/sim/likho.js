@@ -29,6 +29,9 @@ const HIDING = new Set(['Hidden', 'Peek', 'HiddenTree', 'PeekTree']);
 /** Что Лихо швыряет веером и какие капканы ставит. */
 const THROWN = ['throw_clod', 'throw_stone', 'throw_bone'];
 const TRAPS = ['a', 'b', 'c'];
+/** Какие снаряды веера парируются (номера по порядку): варианты для веера из 3 и из 5. */
+const PARRY_PATTERNS = { 3: [[2], [1, 3]], 5: [[3], [1, 5], [2, 4]] };
+const pickOne = (list) => list[Math.floor(Math.random() * list.length)];
 /** Позы, в которых Лихо открыто для ударов (для Медвежьего когтя). */
 const VULNERABLE = new Set(['Tired', 'Stunned', 'Exhausted']);
 /** Насколько медленнее Лихо на рассыпанном горохе. */
@@ -389,20 +392,19 @@ export class Likho {
   *throwFan() {
     const target = this.pickTarget();
     if (!target) return;
-    // Поднимается во весь рост, замахивается — полоса показывает, куда полетит.
+    // Поднимается во весь рост, замахивается.
     this.pose = 'Rise';
     const [dx, dz] = norm(target.x - this.x, target.z - this.z);
     this.face(dx, dz);
-    this.game.telegraphLine(this.x, this.z, dx, dz, 9, 1.2, this.tele(0.7), 'parry');
     yield* this.wait(this.tele(0.7), false);
-
-    // Веер снарядов, средний можно парировать.
+    // Веер снарядов. Какие парируются, меняется от броска к броску: они светятся розовым.
     const count = this.d.extra ? 5 : 3;
+    const parried = pickOne(PARRY_PATTERNS[count]);
     for (let i = 0; i < count; i++) {
       const [fx, fz] = rotate(dx, dz, (i - (count - 1) / 2) * 14);
       // Швыряет что под руку попалось.
-      const look = THROWN[Math.floor(Math.random() * THROWN.length)];
-      this.game.fireEnemy(this.x, this.z, fx, fz, P.throwSpeed * this.d.projectileSpeed, P.throwDamage, i === Math.floor(count / 2), 4, null, look);
+      const look = pickOne(THROWN);
+      this.game.fireEnemy(this.x, this.z, fx, fz, P.throwSpeed * this.d.projectileSpeed, P.throwDamage, parried.includes(i + 1), 4, null, look);
     }
     // Тяжело дышит — окно для ударов.
     this.pose = 'Tired';
