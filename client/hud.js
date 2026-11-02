@@ -237,6 +237,8 @@ export class Hud {
       if (status?.stun > 0) effects.push(`Оглушён ${Math.ceil(status.stun)} с`);
       if (status?.bleed > 0) effects.push(`Кровотечение ×${status.stacks} ${Math.ceil(status.bleed)} с`);
       if (status?.burn > 0) effects.push(`Горит ${Math.ceil(status.burn)} с`);
+      if (status?.hutBleed > 0) effects.push(`Избушка: кровотечение ×${status.hutStacks} ${Math.ceil(status.hutBleed)} с`);
+      if (status?.hutBurn > 0) effects.push(`Избушка горит ${Math.ceil(status.hutBurn)} с`);
       $('boss-status').textContent = effects.join(' · ');
       const curses = (session?.curses ?? []).map((c) => CURSES[c]?.name).filter(Boolean);
       $('boss-curses').textContent = curses.length ? `Проклятия: ${curses.join(', ')}` : '';

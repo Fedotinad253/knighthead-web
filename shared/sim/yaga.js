@@ -167,7 +167,17 @@ export class Yaga {
     };
   }
 
-  applyDamage(amount) { return this.health.apply(amount, (dealt) => this.game.showDamage(this.x, this.z, dealt)); }
+  applyDamage(amount) { return this.health.apply(amount, (dealt) => this.game.showDamage(this.x, this.z, dealt, false, this.onRoof ? 8 : undefined)); }
+
+  /** Кровотечение и огонь идут с Ягой и на крышу, где удары её не достают. */
+  applyDot(amount) {
+    if (!this.onRoof) return this.applyDamage(amount);
+    const { health } = this, was = health.invulnerable;
+    health.invulnerable = false;
+    const dealt = this.applyDamage(amount);
+    health.invulnerable = was;
+    return dealt;
+  }
 
   // ---------------------------------------------------------------- Ход боя
 

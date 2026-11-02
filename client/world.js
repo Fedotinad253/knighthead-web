@@ -130,18 +130,26 @@ function drawBossStatus(game) {
   if (!status || !b || b.pose === 'Dead') return;
   const y = b.onRoof ? 9 : b.airborne ? 5 : 3.2, now = game.now;
   if (status.stun > 0) drawStars(view, b.x, b.z, y, now);
-  if (status.burn > 0) {
-    const [px, py] = view.project(b.x, b.z, b.onRoof ? 4 : 1);
+  // Огонь и кровь видны там, на кого наложены: на Яге, в том числе на крыше, или на избушке.
+  const burn = (x, z, height) => {
+    const [px, py] = view.project(x, z, height);
     drawFlat(view, 'yaga/fx_fire.png', px, py, 1.8, 0, Math.floor(now * 8) % 2 === 0);
-  }
-  if (status.bleed > 0) {
+  };
+  const bleed = (x, z, height, stacks) => {
     const ctx = view.ctx;
     ctx.fillStyle = '#c21d1d';
-    for (let i = 0; i < 2 + status.stacks * 2; i++) {
+    for (let i = 0; i < 2 + stacks * 2; i++) {
       const fall = (now * 1.4 + i * 0.41) % 1;
-      const [px, py] = view.project(b.x + Math.sin(i * 2.4) * 0.5, b.z, (b.onRoof ? 5 : 2) * (1 - fall));
+      const [px, py] = view.project(x + Math.sin(i * 2.4) * 0.5, z, height * (1 - fall));
       ctx.beginPath(); ctx.arc(px, py, view.s * 0.07, 0, Math.PI * 2); ctx.fill();
     }
+  };
+  if (status.burn > 0) burn(b.x, b.z, b.onRoof ? 7.4 : b.airborne ? 3.4 : 1);
+  if (status.bleed > 0) bleed(b.x, b.z, b.onRoof ? 8 : 2, status.stacks);
+  if (b.hut) {
+    const raised = b.hut.fallen || b.hut.seated ? 0 : 3.2;
+    if (status.hutBurn > 0) burn(b.hut.x, b.hut.z - 1, raised + 1.5);
+    if (status.hutBleed > 0) bleed(b.hut.x, b.hut.z - 1, raised + 2, status.hutStacks);
   }
 }
 

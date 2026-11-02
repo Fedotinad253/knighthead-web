@@ -222,7 +222,7 @@ class Game {
 
   /** Попали по врагу: цифра, искры, звук, отдача, тряска, в ближнем бою — стоп-кадр. */
   onDamage(m) {
-    this.vfx.damage(m.x, m.z, m.amount, m.dot);
+    this.vfx.damage(m.x, m.z, m.amount, m.dot, m.y);
     if (this.boss) this.boss.flashUntil = this.now + 0.08;
     if (m.dot) return;
     const big = m.amount >= 60, melee = this.now - (this.local.lastStrikeAt ?? -9) < 0.06;

@@ -124,7 +124,7 @@ export class Game {
         if (player.downed || !this.boss?.hitHut) break;
         const dealt = this.boss.hitHut(Math.min(m.damage, 500));
         if (m.fills) this.addCards(player, dealt / CARDS.damagePerCard);
-        if (dealt > 0) this.applyStatus(this.stepEffect(player, m));
+        if (dealt > 0) this.applyStatus(this.stepEffect(player, m), true);
         break;
       }
       case 'struggle': this.struggle(player); break;
@@ -307,21 +307,25 @@ export class Game {
 
   get bossStunned() { return this.clock.now < (this.bossStatus?.stunUntil ?? 0); }
 
-  /** Наложить на босса кровотечение, огонь или оглушение. Оглушение после себя какое-то время не действует. */
-  applyStatus(effect) {
+  /**
+   * Наложить на босса кровотечение, огонь или оглушение. Оглушение после себя какое-то время не действует.
+   * onHut — попали по избушке: кровь и огонь остаются на ней, а то, что наложено на Ягу, идёт с Ягой и на крышу.
+   */
+  applyStatus(effect, onHut = false) {
     const boss = this.boss, now = this.clock.now;
     if (!effect || !boss || boss.dead || boss.cutscene) return;
     const status = this.bossStatus ??= {};
+    const on = onHut ? status.hut ??= {} : status, at = onHut ? boss.hut : boss;
     if (effect === 'bleed') {
-      const stacks = now < (status.bleedUntil ?? 0) ? status.bleedStacks : 0;
-      status.bleedStacks = Math.min(stacks + 1, STATUS.bleed.maxStacks);
-      status.bleedUntil = now + STATUS.bleed.duration;
-      status.bleedNext ??= now + STATUS.bleed.tick;
-      this.floatText(boss.x, boss.z, 3.2, 'Кровотечение!', '#ff5a5a', 1);
+      const stacks = now < (on.bleedUntil ?? 0) ? on.bleedStacks : 0;
+      on.bleedStacks = Math.min(stacks + 1, STATUS.bleed.maxStacks);
+      on.bleedUntil = now + STATUS.bleed.duration;
+      on.bleedNext ??= now + STATUS.bleed.tick;
+      this.floatText(at.x, at.z, 3.2, 'Кровотечение!', '#ff5a5a', 1);
     } else if (effect === 'burn') {
-      status.burnUntil = now + STATUS.burn.duration;
-      status.burnNext ??= now + STATUS.burn.tick;
-      this.floatText(boss.x, boss.z, 3.2, 'Горит!', '#ffa040', 1);
+      on.burnUntil = now + STATUS.burn.duration;
+      on.burnNext ??= now + STATUS.burn.tick;
+      this.floatText(at.x, at.z, 3.2, 'Горит!', '#ffa040', 1);
     } else if (effect === 'stun') {
       if (boss.transition || now < (status.stunImmuneUntil ?? 0)) return;
       status.stunUntil = now + STATUS.stun.duration;
@@ -333,20 +337,24 @@ export class Game {
     }
   }
 
-  /** Такты кровотечения и огня. Яга на крыше неуязвима: урон идёт по избушке, по которой и попали. */
+  /** Такты кровотечения и огня: урон идёт по тому, на кого их наложили, по самому боссу или по его избушке. */
   updateStatus(now) {
     const status = this.bossStatus, boss = this.boss;
     if (!status || !boss || boss.dead) return;
-    const tick = (until, next, config, damage) => {
-      if (now >= (status[until] ?? 0)) { status[next] = undefined; return; }
-      if (now < status[next]) return;
-      status[next] = now + config.tick;
-      this.dotTicking = true;
-      if (boss.onRoof) boss.hitHut(damage); else boss.applyDamage(damage);
-      this.dotTicking = false;
+    const ticks = (on, hurt) => {
+      const tick = (until, next, config, damage) => {
+        if (now >= (on[until] ?? 0)) { on[next] = undefined; return; }
+        if (now < on[next]) return;
+        on[next] = now + config.tick;
+        this.dotTicking = true;
+        hurt(damage);
+        this.dotTicking = false;
+      };
+      tick('bleedUntil', 'bleedNext', STATUS.bleed, STATUS.bleed.damage * (on.bleedStacks ?? 1));
+      tick('burnUntil', 'burnNext', STATUS.burn, STATUS.burn.damage);
     };
-    tick('bleedUntil', 'bleedNext', STATUS.bleed, STATUS.bleed.damage * (status.bleedStacks ?? 1));
-    tick('burnUntil', 'burnNext', STATUS.burn, STATUS.burn.damage);
+    ticks(status, (damage) => (boss.applyDot ? boss.applyDot(damage) : boss.applyDamage(damage)));
+    if (status.hut) ticks(status.hut, (damage) => boss.hitHut?.(damage));
   }
 
   // ---------------------------------------------------------------- Снаряжение и бытовая магия
@@ -708,8 +716,8 @@ export class Game {
   flash(x, z, r, look = null) { this.broadcast({ t: 'flash', x, z, r, look }); }
   floatText(x, z, y, text, color, duration = 1.2) { this.broadcast({ t: 'text', x, z, y, text, color, duration }); }
   /** Показать урон. dot — это кровотечение или огонь (без стоп-кадра), wood — удар по избушке (летят щепки). */
-  showDamage(x, z, amount, wood = false) {
-    this.broadcast({ t: 'damage', x, z, amount: Math.round(amount), dot: !!this.dotTicking, wood });
+  showDamage(x, z, amount, wood = false, y = undefined) {
+    this.broadcast({ t: 'damage', x, z, y, amount: Math.round(amount), dot: !!this.dotTicking, wood });
   }
   /** Подсказки атак (красные круги и полосы). Возвращают номер — чтобы убрать подсказку, если атака отменилась. */
   telegraphCircle(x, z, r, duration, color) {
@@ -836,7 +844,7 @@ export class Game {
       if (hut?.active && !hut.fallen && this.boss.onRoof) {
         // Яга на крыше: стрелы попадают только по ногам избушки, остальные летят мимо.
         if (!this.boss.arrowHitsLeg(p.x, p.z)) continue;
-        if (this.boss.hitHut(p.damage) > 0) this.applyStatus(p.effect);
+        if (this.boss.hitHut(p.damage) > 0) this.applyStatus(p.effect, true);
         p.hitBoss = true;
         if (!p.pierce) p.expire = 0;
       } else if (this.boss.arrowHits ? this.boss.arrowHits(p.x, p.z) : Math.hypot(p.x - this.boss.x, p.z - this.boss.z) < this.boss.radius + 0.25) {
@@ -879,6 +887,8 @@ export class Game {
       bleed: now < (s.bleedUntil ?? 0) ? r2(s.bleedUntil - now) : 0, stacks: s.bleedStacks ?? 0,
       burn: now < (s.burnUntil ?? 0) ? r2(s.burnUntil - now) : 0,
       stun: now < (s.stunUntil ?? 0) ? r2(s.stunUntil - now) : 0,
+      hutBleed: now < (s.hut?.bleedUntil ?? 0) ? r2(s.hut.bleedUntil - now) : 0, hutStacks: s.hut?.bleedStacks ?? 0,
+      hutBurn: now < (s.hut?.burnUntil ?? 0) ? r2(s.hut.burnUntil - now) : 0,
     };
   }
 

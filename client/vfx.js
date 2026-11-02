@@ -59,10 +59,10 @@ export class Vfx {
   /** Брошенная бытовая магия: летит дугой из (x, z) в (tx, tz). */
   toss(kind, x, z, tx, tz, flight = 0.35) { this.add({ kind: 'toss', what: kind, x, z, tx, tz, until: this.now + flight }); }
   /** Цифра урона: чем больше, тем крупнее и горячее. Кровотечение и огонь — маленькие и красные. */
-  damage(x, z, amount, dot = false) {
+  damage(x, z, amount, dot = false, height = 2.4) {
     const color = dot ? '#ff7a5a' : amount >= 90 ? '#ff9a3c' : amount >= 40 ? '#ffd966' : '#fff';
     const size = dot ? 0.3 : 0.4 + Math.min(0.55, amount / 220);
-    this.add({ kind: 'text', x: x + (Math.random() - 0.5) * 1.2, z, y: 2.4 + Math.random() * 0.5, text: String(amount), color, size, pop: !dot, until: this.now + 0.8, duration: 0.8 });
+    this.add({ kind: 'text', x: x + (Math.random() - 0.5) * 1.2, z, y: height + Math.random() * 0.5, text: String(amount), color, size, pop: !dot, until: this.now + 0.8, duration: 0.8 });
   }
 
   /** Всё, что лежит на земле, — под персонажами. */
