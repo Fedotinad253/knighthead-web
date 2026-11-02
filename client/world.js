@@ -108,6 +108,15 @@ function drawHitboxes(game) {
   const { view } = game;
   for (const h of game.liveHazards()) view.groundEllipse(h.x, h.z, h.r, h.r, null, h.parry ? '#ff59c7' : '#ff3b2f', 0.05);
   if (game.boss) view.groundEllipse(game.boss.x, game.boss.z, game.boss.radius, game.boss.radius, null, '#ffd94d', 0.05);
+  // Яга: полоса, куда попадают стрелы. Избушка: только ноги.
+  const arrowBox = game.boss?.arrowBox;
+  if (arrowBox) {
+    const [x0, y0] = view.project(game.boss.x - arrowBox.halfWidth, arrowBox.z1);
+    const [x1, y1] = view.project(game.boss.x + arrowBox.halfWidth, arrowBox.z0);
+    view.ctx.strokeStyle = '#ffd94d'; view.ctx.lineWidth = Math.max(1, view.s * 0.05);
+    view.ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
+  }
+  if (game.boss?.hut?.active) for (const leg of game.boss.hut.legs) view.groundEllipse(leg.x, leg.z, leg.r, leg.r, null, '#ffd94d', 0.05);
   const me = game.local;
   view.groundEllipse(me.x, me.z, 0.45, 0.45, null, '#5bff7a', 0.05);
   // Хитбокс богатыря для снарядов — очертания рисунка в текущей позе.

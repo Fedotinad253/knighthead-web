@@ -232,11 +232,43 @@ function drawRider(view, h, now, me) {
   ctx.restore();
 }
 
+/** Крыло белого всадника: летит сбоку от него и ранит. Перья раскрываются наружу от коня. */
+function drawWing(view, h, now) {
+  const ctx = view.ctx, s = view.s, l = Math.hypot(h.vx, h.vz) || 1;
+  const side = h.look === 'wing_left' ? 1 : -1;
+  const nx = -h.vz / l * side, nz = h.vx / l * side;
+  view.groundEllipse(h.x, h.z, h.r, h.r * 0.7, 'rgba(0,0,0,0.25)');
+  const [bx, by] = view.project(h.x - nx * 0.9, h.z - nz * 0.9, 1.8);
+  const [tx, ty] = view.project(h.x + nx * 1, h.z + nz * 1, 1.8);
+  const angle = Math.atan2(ty - by, tx - bx), length = Math.hypot(tx - bx, ty - by);
+  const flap = Math.sin(now * 12 + h.id) * 0.3;
+  ctx.save();
+  ctx.translate(bx, by);
+  ctx.rotate(angle);
+  ctx.fillStyle = '#e8e4d6';
+  ctx.strokeStyle = '#111';
+  ctx.lineWidth = Math.max(1.5, s * 0.04);
+  // Перья веером, самое длинное впереди.
+  for (let i = 0; i < 5; i++) {
+    const a = (i - 2) * 0.22 + flap * 0.5, len = Math.max(length, s * 1.9) * (1 - Math.abs(i - 1) * 0.12);
+    ctx.save();
+    ctx.rotate(a);
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.quadraticCurveTo(len * 0.55, -s * 0.36, len, 0);
+    ctx.quadraticCurveTo(len * 0.55, s * 0.36, 0, 0);
+    ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
 /** Брошенное и пролетающее: комья, камни, кости, всадники, лопата, гуси. */
 export function drawWideProjectile(view, h, now, me) {
   const ctx = view.ctx, s = view.s;
   const flip = h.vx < 0;
   if (RIDERS[h.look]) drawRider(view, h, now, me);
+  else if (h.look === 'wing_left' || h.look === 'wing_right') drawWing(view, h, now);
   else if (h.look === 'shovel') {
     const l = Math.hypot(h.vx, h.vz) || 1, dx = h.vx / l, dz = h.vz / l;
     const [x0, y0] = view.project(h.x, h.z, 0.6);
@@ -269,5 +301,5 @@ export function drawFireZone(view, h, now) {
   const flicker = 0.85 + Math.sin(now * 13 + h.id) * 0.12;
   view.groundEllipse(h.x, h.z, h.r, h.r, `rgba(255,110,30,${0.4 * flicker})`);
   const [px, py] = view.project(h.x, h.z, 0.4);
-  drawFlat(view, 'yaga/fx_fire.png', px, py, 2.1 * flicker, 0, h.id % 2 === 0);
+  drawFlat(view, 'yaga/fx_fire.png', px, py, h.r * 2.3 * flicker, 0, h.id % 2 === 0);
 }

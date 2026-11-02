@@ -344,8 +344,7 @@ export class Game {
           const strike = () => game.damageBoss(player, spell.damage, false);
           if (game.boss.throughCover) game.boss.throughCover(strike); else strike();
         }
-        const hut = game.boss.hut;
-        if (hut && Math.hypot(hut.x - x, hut.z - z) < spell.radius + 2.6) game.boss.hitHut?.(spell.damage);
+        if (game.boss.hutLegs?.some((leg) => Math.hypot(leg.x - x, leg.z - z) < spell.radius + leg.r)) game.boss.hitHut(spell.damage);
       })(this));
     } else if (id === 'decoy') {
       this.decoy = { id: 'decoy', x, z, expire: now + spell.duration, downed: false, owner: player.id };
@@ -764,12 +763,14 @@ export class Game {
       p.x += p.vx * dt; p.z += p.vz * dt;
       if (!this.boss || p.hitBoss) continue;
       const hut = this.boss.hut;
-      if (hut?.active && !hut.fallen && this.boss.onRoof && Math.hypot(p.x - hut.x, p.z - hut.z) < 2.85) {
+      if (hut?.active && !hut.fallen && this.boss.onRoof) {
+        // Яга на крыше: стрелы попадают только по ногам избушки, остальные летят мимо.
+        if (!this.boss.arrowHitsLeg(p.x, p.z)) continue;
         this.boss.hitHut(p.damage);
         p.hitBoss = true;
         if (!p.pierce) p.expire = 0;
-      } else if (Math.hypot(p.x - this.boss.x, p.z - this.boss.z) < this.boss.radius + 0.25) {
-        this.damageBoss(p.owner, p.damage * (this.boss.arrowFactor ?? 1), p.fills);
+      } else if (this.boss.arrowHits ? this.boss.arrowHits(p.x, p.z) : Math.hypot(p.x - this.boss.x, p.z - this.boss.z) < this.boss.radius + 0.25) {
+        this.damageBoss(p.owner, p.damage, p.fills);
         p.hitBoss = true;
         if (!p.pierce) p.expire = 0;
       }

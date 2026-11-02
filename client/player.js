@@ -114,7 +114,11 @@ export class LocalPlayer {
     let nx = this.x + this.vx * dt, nz = this.z + this.vz * dt;
     const boss = game.boss;
     const extra = boss && boss.pose !== 'Dead' && game.scene !== 'tavern' && !boss.airborne ? [{ type: 'circle', x: boss.x, z: boss.z, r: boss.radius ?? 0.55 }] : [];
-    if (boss?.hut && !boss.hut.fallen && !me.dragged) extra.push({ type: 'circle', x: boss.hut.x, z: boss.hut.z, r: boss.hut.r });
+    // Вставшая избушка мешает только ногами, под домом можно пройти. Сидящая и упавшая — стоит целиком.
+    if (boss?.hut && !me.dragged) {
+      if (boss.hut.active && !boss.hut.fallen) for (const leg of boss.hut.legs) extra.push({ type: 'circle', x: leg.x, z: leg.z, r: leg.r * 0.7 });
+      else if (!boss.hut.fallen) extra.push({ type: 'circle', x: boss.hut.x, z: boss.hut.z, r: boss.hut.r });
+    }
     [this.x, this.z] = resolveCollisions(game.sceneData, nx, nz, P.radius, extra);
     this.speed = dt > 0 ? Math.hypot(this.x - ox, this.z - oz) / dt : 0;
 
@@ -296,7 +300,10 @@ export class LocalPlayer {
     if (!boss || boss.hp <= 0) return;
     // Яга на крыше: бьём по ногам избушки. В воздухе ближним оружием не достать.
     const hut = boss.hut;
-    if (hut?.active && !hut.fallen && boss.onRoof) { if (reaches(hut.x, hut.z, hut.r)) game.send({ t: 'hitHut', damage: step.damage, fills: !card }); return; }
+    if (hut?.active && !hut.fallen && boss.onRoof) {
+      if (hut.legs.some((leg) => reaches(leg.x, leg.z, leg.r))) game.send({ t: 'hitHut', damage: step.damage, fills: !card });
+      return;
+    }
     if (boss.airborne) return;
     if (reaches(boss.x, boss.z, boss.radius ?? 0.55)) game.send({ t: 'hit', damage: step.damage, fills: !card });
   }

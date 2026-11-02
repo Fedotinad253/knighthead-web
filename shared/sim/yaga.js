@@ -15,7 +15,7 @@ const P = {
   hutSpeed: 4, hutRunSpeed: 13, hutRadius: 2.6, stompRadius: 2.4, stompDamage: 18, runDamage: 20, peckDamage: 12, peckRange: 4.5,
   /** Здоровье избушки: кончилось — падает, потом встаёт заново с полным. */
   hutHealth: 300, fallWindow: 3, hutGuard: 2,
-  riderSpeed: 13, riderDamage: 14, fireDamage: 8, darkTime: 4,
+  riderSpeed: 13, riderDamage: 14, wingOffset: 2.1, wingRadius: 0.95, wingDamage: 12, fireDamage: 8, fireRadius: 1.6, darkTime: 4, darkLead: 1,
   shovelSpeed: 12, shovelDamage: 30, struggle: 6,
   fireLife: 4, stoveFireDamage: 10,
   dashSpeed: 14, dashDamage: 14, restWindow: 2,
@@ -30,6 +30,11 @@ const VULNERABLE = new Set(['Stuck', 'Stunned', 'Tired', 'Exhausted']);
 
 /** Какие кости из пяти парируются (номера по порядку). */
 const BONE_PARRIES = [[2, 4], [1, 3], [4, 5], [1, 5]];
+
+/** Хитбокс Яги для стрел: половина ширины и глубина от её точки на земле (на земле и в воздухе). */
+const ARROW_BOX_WIDTH = 0.9, GROUND_ARROW_BOX = [-0.7, 2.1], AIR_ARROW_BOX = [0.3, 3.9];
+/** Ноги избушки: насколько в стороны от середины и какой толщины. */
+const LEG_OFFSET = 1.7, LEG_RADIUS = 1;
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const norm = (x, z) => { const l = Math.hypot(x, z); return l > 1e-5 ? [x / l, z / l] : [0, 0]; };
@@ -84,8 +89,32 @@ export class Yaga {
   get vulnerable() { return !this.dead && VULNERABLE.has(this.pose); }
   /** Ближним оружием в воздухе и на крыше не достать. */
   get meleeImmune() { return this.airborne; }
-  /** Стрелы в летящую Ягу бьют вполсилы. */
-  get arrowFactor() { return this.airborne ? 0.5 : 1; }
+
+  /**
+   * Куда попадает стрела, чтобы на экране это выглядело как попадание по рисунку. Стрела летит низко, а Яга нарисована выше
+   * своей точки на земле (в воздухе ещё выше), поэтому хитбокс — полоса от точки Яги дальше по глубине. На крыше не достать.
+   */
+  get arrowBox() {
+    const [z0, z1] = this.airborne ? AIR_ARROW_BOX : GROUND_ARROW_BOX;
+    return { halfWidth: ARROW_BOX_WIDTH, z0: this.z + z0, z1: this.z + z1 };
+  }
+
+  arrowHits(x, z) {
+    if (this.onRoof) return false;
+    const box = this.arrowBox;
+    return Math.abs(x - this.x) < box.halfWidth && z > box.z0 && z < box.z1;
+  }
+
+  /** Хитбоксы ног избушки. По дому и крыше удары не проходят. */
+  get hutLegs() {
+    const { x, z } = this.hut;
+    return [-1, 1].map((side) => ({ x: x + side * LEG_OFFSET, z: z - 1, r: LEG_RADIUS }));
+  }
+
+  /** Стрела по ноге: она высокая, поэтому попадание — тоже полоса по глубине. */
+  arrowHitsLeg(x, z) {
+    return this.hutLegs.some((leg) => Math.abs(x - leg.x) < leg.r && z > leg.z - 0.7 && z < leg.z + 1.8);
+  }
   get contactDamage() { return 0; }
   get hutChargeDamage() { return this.hut.charging ? P.runDamage : 0; }
 
@@ -129,9 +158,10 @@ export class Yaga {
       airborne: this.airborne, onRoof: this.onRoof, cutscene: this.cutscene,
       finisherReady: this.finisherReady, finisherLabel: 'Сказать заветные слова',
       claws: this.claws.active ? { token: this.claws.token, damage: this.claws.damage } : null,
+      arrowBox: this.onRoof ? null : { ...this.arrowBox, z0: r2(this.arrowBox.z0), z1: r2(this.arrowBox.z1) },
       contact: 0, fenceR: P.fenceRadius, gateBite: this.gateStrikeAt > 0, stoveLit: this.phase === 3,
       hut: { x: r2(h.x), z: r2(h.z), active: h.active, fallen: h.fallen, seated: h.seated, moving: h.moving,
-        turned: h.turnedUntil > this.now, charging: h.charging, token: h.token, hp: Math.round(h.hp), max: Math.round(h.max), r: P.hutRadius },
+        turned: h.turnedUntil > this.now, legs: this.hutLegs.map((l) => ({ x: r2(l.x), z: r2(l.z), r: l.r })), charging: h.charging, token: h.token, hp: Math.round(h.hp), max: Math.round(h.max), r: P.hutRadius },
       phaseMarks: [2 / 3, 1 / 3],
     };
   }
@@ -427,28 +457,43 @@ export class Yaga {
     yield* this.wait(0.4);
   }
 
-  /** Три всадника: белый бьёт, красный оставляет огненный след, после чёрного темнеет. */
+  /**
+   * Три всадника в случайном порядке. Белый с крыльями бьёт шире, красный оставляет широкий огненный след,
+   * чёрный сначала ослепляет и появляется уже из темноты.
+   */
   *riders(target) {
     const rounds = this.d.extra ? 2 : 1;
     const R = this.scene.bounds.r;
     this.game.announce('Три всадника!');
     for (let round = 0; round < rounds; round++) {
-      for (const kind of ['rider_white', 'rider_red', 'rider_black']) {
+      const order = ['rider_white', 'rider_red', 'rider_black'];
+      for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+      for (const kind of order) {
         if (this.dead) return;
+        if (kind === 'rider_black') {
+          this.game.darkUntil = this.now + P.darkLead;
+          yield* this.wait(P.darkLead);
+          if (this.dead) return;
+        }
         // Въезжает через забор на одном краю поляны и уезжает через другой, по полосе через богатыря.
         const a = Math.random() * Math.PI * 2, dx = Math.sin(a), dz = Math.cos(a);
         const b = target.x * dx + target.z * dz, root = Math.sqrt(Math.max(0, b * b - (target.x * target.x + target.z * target.z - R * R)));
         const behind = b + root, length = behind + root - b;
         const sx = target.x - dx * behind, sz = target.z - dz * behind;
-        this.game.telegraphLine(sx, sz, dx, dz, length, 2.2, this.tele(0.8));
-        yield* this.wait(this.tele(0.8));
-        const speed = P.riderSpeed, life = length / speed;
+        const speed = P.riderSpeed, life = length / speed, telegraph = this.tele(0.8);
+        if (kind === 'rider_black') this.game.darkUntil = this.now + telegraph + life + P.darkTime * 0.5;
+        const width = kind === 'rider_white' ? (P.wingOffset + P.wingRadius) * 2 : kind === 'rider_red' ? P.fireRadius * 2 : 2.2;
+        this.game.telegraphLine(sx, sz, dx, dz, length, width, telegraph);
+        yield* this.wait(telegraph);
         this.game.spawnWide(sx, sz, dx, dz, speed, 1.1, P.riderDamage, life, kind);
-        if (kind === 'rider_red') this.tasks.start(this.fireTrail(sx, sz, dx, dz, speed, life));
-        if (kind === 'rider_black') {
-          const game = this.game;
-          this.tasks.start((function* () { yield life * 0.6; game.darkUntil = game.clock.now + P.darkTime; })());
+        if (kind === 'rider_white') {
+          // Крылья летят по бокам и ранят сами по себе.
+          for (const [side, look] of [[1, 'wing_left'], [-1, 'wing_right']]) {
+            const ox = -dz * side * P.wingOffset, oz = dx * side * P.wingOffset;
+            this.game.spawnWide(sx + ox, sz + oz, dx, dz, speed, P.wingRadius, P.wingDamage, life, look);
+          }
         }
+        if (kind === 'rider_red') this.tasks.start(this.fireTrail(sx, sz, dx, dz, speed, life));
         yield* this.wait(0.7);
       }
     }
@@ -458,7 +503,7 @@ export class Yaga {
     const start = this.now, life = (this.has('hungry') ? 2 : 1) * 3;
     while (!this.dead && this.now - start < duration) {
       const t = (this.now - start) * speed, x = sx + dx * t, z = sz + dz * t;
-      if (Math.hypot(x, z) < this.scene.bossRadius) this.game.spawnZone(x, z, 0.9, 'fire', life, P.fireDamage);
+      if (Math.hypot(x, z) < this.scene.bossRadius) this.game.spawnZone(x, z, P.fireRadius, 'fire', life, P.fireDamage);
       yield 0.12;
     }
   }
