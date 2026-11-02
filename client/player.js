@@ -47,6 +47,9 @@ export class LocalPlayer {
   get rollProgress() { return this.rolling ? (this.now - this.rollStart) / P.rollDuration : 0; }
   get stunned() { return this.now < this.stunnedUntil; }
   get parrying() { return this.now < this.parryUntil; }
+  /** Насколько восстановились перекат и щит: от 0 до 1. */
+  get rollCharge() { return Math.min(1, 1 - (this.nextRoll - this.now) / (P.rollDuration + P.rollCooldown)); }
+  get shieldCharge() { return Math.min(1, 1 - (this.parryReadyAt - this.now) / (P.parryWindow + P.parryCooldown)); }
   get invulnerable() {
     return this.now < this.invulnerableUntil || this.me?.downed || this.game.cutscene;
   }
@@ -422,6 +425,7 @@ export class LocalPlayer {
         this.invulnerableUntil = this.now + P.parryInvulnerability;
         game.vfx.parryFlash(this.x, this.z);
         game.vfx.sparks(this.x, this.z, 16);
+        this.shieldFlashUntil = this.now + 0.18;
         // Парирование — главный момент: заметный стоп-кадр и тряска.
         game.hitStop(0.13);
         game.view.shake(0.28, 0.2, this.now);

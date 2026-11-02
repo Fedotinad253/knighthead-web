@@ -211,18 +211,53 @@ function drawArc(view, i, t) {
   void angle;
 }
 
-/** Кольцо парирования у ног: розовое, убывает как таймер. */
-export function drawParryRing(view, x, z, remaining, window = 1) {
-  const ctx = view.ctx, s = view.s;
-  const [px, py] = view.project(x, z);
-  const f = Math.max(0, Math.min(1, remaining / window));
+/** Очертание щита-капли: h — высота, точка (0, 0) посередине. */
+export function shieldPath(ctx, h) {
+  const w = h * 0.36;
+  ctx.beginPath();
+  ctx.moveTo(-w, -h * 0.28);
+  ctx.quadraticCurveTo(-w, -h * 0.5, 0, -h * 0.5);
+  ctx.quadraticCurveTo(w, -h * 0.5, w, -h * 0.28);
+  ctx.bezierCurveTo(w, h * 0.08, h * 0.18, h * 0.34, 0, h * 0.5);
+  ctx.bezierCurveTo(-h * 0.18, h * 0.34, -w, h * 0.08, -w, -h * 0.28);
+  ctx.closePath();
+}
+
+/** Щит в руке богатыря. glow — розовое свечение (то же, что у парируемых атак), flash — белая вспышка от отражённого удара. */
+export function drawShield(ctx, px, py, h, { alpha = 1, glow = 1, flash = 0 } = {}) {
   ctx.save();
   ctx.translate(px, py);
-  ctx.scale(1, SIN);
-  ctx.lineWidth = s * 0.09;
-  ctx.strokeStyle = 'rgba(255,90,200,0.35)';
-  ctx.beginPath(); ctx.arc(0, 0, s * 0.85, 0, Math.PI * 2); ctx.stroke();
-  ctx.strokeStyle = 'rgba(255,110,215,0.95)';
-  ctx.beginPath(); ctx.arc(0, 0, s * 0.85, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * f); ctx.stroke();
+  ctx.globalAlpha = alpha;
+  ctx.shadowColor = 'rgba(255,90,200,0.95)';
+  ctx.shadowBlur = h * 0.45 * glow;
+  shieldPath(ctx, h);
+  ctx.fillStyle = '#8f2a20';
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  // Доски и окантовка.
+  ctx.save();
+  ctx.clip();
+  ctx.fillStyle = '#a93a2a';
+  ctx.fillRect(-h, -h, h, h * 2);
+  ctx.restore();
+  ctx.lineWidth = h * 0.05;
+  ctx.strokeStyle = '#c9a24a';
+  shieldPath(ctx, h * 0.88);
+  ctx.stroke();
+  ctx.lineWidth = h * 0.035;
+  ctx.strokeStyle = '#241710';
+  shieldPath(ctx, h);
+  ctx.stroke();
+  // Умбон посередине.
+  ctx.fillStyle = '#d8cdb0';
+  ctx.beginPath(); ctx.arc(0, -h * 0.1, h * 0.1, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#241710';
+  ctx.stroke();
+  if (flash > 0) {
+    ctx.globalAlpha = alpha * flash;
+    ctx.fillStyle = '#fff';
+    shieldPath(ctx, h);
+    ctx.fill();
+  }
   ctx.restore();
 }

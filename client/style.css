@@ -31,7 +31,6 @@ canvas#game { position: fixed; inset: 0; width: 100vw; height: 100vh; display: b
 .card { width: 26px; height: 36px; border-radius: 4px; border: 1px solid rgba(255,217,102,0.6); background: rgba(0,0,0,0.45); position: relative; overflow: hidden; }
 .card > i { position: absolute; left: 0; right: 0; bottom: 0; background: linear-gradient(#ffe38a, #d99a2a); }
 .card.full { box-shadow: 0 0 8px rgba(255, 217, 102, 0.8); }
-#dash.off, #parry.off { opacity: 0.35; }
 
 #boss { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); width: min(640px, 80vw); text-align: center; }
 #boss-name { font-size: 20px; font-weight: 700; letter-spacing: 1px; text-shadow: 0 2px 4px #000; }

@@ -1,12 +1,12 @@
 // Рисование сцен (таверна, ночной лес, арена) и всех, кто в них: богатыри, боссы, снаряды, капканы.
 // Порядок — от дальнего к ближнему (больший Z — дальше), как в 3D.
-import { WEAPONS, WORLDS, BOSSES } from '../shared/data.js';
+import { WEAPONS, WORLDS, BOSSES, PLAYER, SESSION } from '../shared/data.js';
 import { SCENES } from '../shared/scenes.js';
 import { assets } from './assets.js';
 import { shade, SIN, ORB_LIFT, ORB_RADIUS } from './view.js';
 import { drawClearingProps, drawYaga, drawHut, drawWideProjectile, drawFireZone, drawFlat, drawStars, drawGroundTile } from './yagaview.js';
 import { bogatyrPose } from './rig.js';
-import { drawParryRing } from './vfx.js';
+import { drawShield, shieldPath } from './vfx.js';
 import { keyName } from './input.js';
 
 const NPC_ART = { healer: ['characters/Healer.png', 2.05], smith: ['characters/Smith.png', 2.15] };
@@ -30,10 +30,6 @@ export function drawWorld(game) {
     if (h.type !== 'zone') continue;
     if (h.kind === 'trap' && trapVisible(game, h)) drawTrap(view, h);
     else if (h.kind === 'fire') drawFireZone(view, h, game.now);
-  }
-  for (const p of game.players) {
-    if (!p.visible) continue;
-    if (p.anim?.parry > 0) drawParryRing(view, p.x, p.z, p.anim.parry);
   }
 
   const drawables = [];
@@ -102,8 +98,54 @@ export function drawWorld(game) {
   if (game.boss?.kind === 'dummy') view.label(game.boss.x, game.boss.z, 3.4, game.boss.name, '#ffe9a8', 0.4);
   drawBossStatus(game);
   game.vfx.drawTop(view);
+  drawCooldowns(game);
   drawScreenEffects(game);
   if (game.showHitboxes) drawHitboxes(game);
+}
+
+/** Под ногами богатыря: готовы ли перекат и щит. Пока идёт перезарядка, значок серый и вокруг него набирается дуга. */
+function drawCooldowns(game) {
+  const { view, local } = game, ctx = view.ctx, s = view.s;
+  const me = game.avatars?.get(game.myId);
+  if (!me?.visible || me.downed || game.session?.state !== SESSION.ARENA || game.cutscene) return;
+  const [px, py] = view.project(me.x, me.z);
+  const r = Math.max(12, s * 0.24), y = py + s * 0.5;
+  const pip = (name, x, charge, color, icon) => {
+    const ready = charge >= 1, pops = local.pipPops ??= {};
+    if (ready && pops[name]?.ready === false) pops[name].at = game.now;
+    pops[name] = { at: pops[name]?.at ?? -9, ready };
+    const pop = 1 + 0.45 * Math.max(0, 1 - (game.now - pops[name].at) / 0.2);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(pop, pop);
+    ctx.fillStyle = 'rgba(14,11,8,0.78)';
+    ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+    ctx.lineWidth = Math.max(2, r * 0.2);
+    ctx.strokeStyle = ready ? color : 'rgba(255,255,255,0.14)';
+    ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.stroke();
+    if (!ready) {
+      ctx.strokeStyle = color;
+      ctx.beginPath(); ctx.arc(0, 0, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * charge); ctx.stroke();
+    }
+    ctx.globalAlpha = ready ? 1 : 0.4;
+    icon(ready ? color : '#cfcabd');
+    ctx.restore();
+  };
+  pip('roll', px - r * 1.35, local.rollCharge, '#ffd966', (color) => {
+    // Две стрелки, куда летит перекат.
+    ctx.strokeStyle = color;
+    ctx.lineWidth = Math.max(1.5, r * 0.2);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    for (const x of [-r * 0.42, r * 0.08]) { ctx.moveTo(x, -r * 0.42); ctx.lineTo(x + r * 0.34, 0); ctx.lineTo(x, r * 0.42); }
+    ctx.stroke();
+  });
+  pip('shield', px + r * 1.35, local.shieldCharge, '#ff7ad1', (color) => {
+    shieldPath(ctx, r * 1.25);
+    ctx.fillStyle = color;
+    ctx.fill();
+  });
 }
 
 /** Вспышка на весь экран и красный край, когда богатырь ранен. */
@@ -381,6 +423,14 @@ function drawPlayer(game, p) {
     overlay: flash ? '#ffffff' : (blink || p.downed) ? '#000000' : null,
     overlayAlpha: flash ? 0.7 : blink ? 0.45 : p.downed ? 0.35 : 0,
   });
+  if (p.anim?.parry > 0) {
+    // Щит: быстро вскидывается, к концу окна угасает свечение.
+    const left = p.anim.parry, age = PLAYER.parryWindow - left;
+    const rise = Math.min(1, age / 0.09), size = view.s * 0.95 * (0.7 + 0.3 * rise + 0.12 * Math.sin(rise * Math.PI));
+    const [sx, sy] = view.project(p.x + (p.flip ? -0.42 : 0.42), p.z, 1.05);
+    const flashLeft = p.id === game.myId ? (game.local.shieldFlashUntil ?? 0) - game.now : 0;
+    drawShield(ctx, sx, sy, size, { alpha: Math.min(1, left / 0.12), glow: Math.min(1, left / PLAYER.parryWindow + 0.25), flash: Math.max(0, flashLeft / 0.18) });
+  }
   if (p.anim?.stun) drawStars(view, p.x, p.z, 2.4, game.now);
 }
 

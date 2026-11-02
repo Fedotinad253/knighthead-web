@@ -120,7 +120,7 @@ export class Hud {
     const rows = [
       ['Время', `${minutes}:${seconds}`, m.parts.time, 40],
       ['Получено урона', m.damageTaken, m.parts.damage, 40],
-      ['Парирования', m.parries, m.parts.parries, 20],
+      ['Отбито щитом', m.parries, m.parts.parries, 20],
       ['Сложность', DIFFICULTIES[m.difficulty].name, m.difficulty >= 1 ? 10 : 0, 10],
     ];
     $('result-table').innerHTML = rows.map(([name, value, score, max]) =>
@@ -173,9 +173,6 @@ export class Hud {
         cards[i].firstChild.style.height = `${f * 100}%`;
         cards[i].classList.toggle('full', f >= 0.999);
       }
-      const local = game.local;
-      $('dash').classList.toggle('off', now < local.nextRoll);
-      $('parry').classList.toggle('off', now < local.parryReadyAt && !local.parrying);
       // Все карты набраны — готов ультимейт.
       const weapon = WEAPONS[me.weapon];
       const ready = weapon && me.cards >= CARDS.max - 1e-3;
@@ -278,7 +275,7 @@ export class Hud {
     const move = ['up', 'left', 'down', 'right'].map(k).join('');
     $('hint').textContent = onMap
       ? (game.session.stoneOpen ? `1 / 2 — выбрать сложность     ${k('back')} — отойти` : `${move} — бежать избушкой     ${k('interact')} — в бой у логова     ${k('back')} — отойти от карты`)
-      : `${k('light')}/${k('heavy')} — атаки   ${k('card')} + атака — карта и ультимейт   ${k('dash')} — перекат   ${k('parry')} — парирование   ${k('ability')}/${k('magic')} — способность и магия   ${k('interact')} — действие   ${k('help')} — управление`;
+      : `${k('light')}/${k('heavy')} — атаки   ${k('card')} + атака — карта и ультимейт   ${k('dash')} — перекат   ${k('parry')} — щит   ${k('ability')}/${k('magic')} — способность и магия   ${k('interact')} — действие   ${k('help')} — управление`;
   }
 
   updateMap(onMap) {
