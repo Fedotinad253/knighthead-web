@@ -558,10 +558,11 @@ export class Game {
     this.tasks.stopAll();
     this.broadcast({ t: 'scene', ...this.sessionInfo() });
 
-    // Все встают на свои места живыми, с оружием в руках и без проклятия.
+    // Все встают на свои места живыми, с оружием в руках, без проклятия и без накопленных карт.
     this.players.forEach((p) => {
       p.downed = false;
       p.hp = PLAYER.maxHealth;
+      p.cards = 0;
       p.dropped = null;
       p.cursed = false;
       p.slipperyUntil = 0;
