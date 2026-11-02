@@ -288,7 +288,7 @@ class Game {
       }
       if (fx > 0.15) avatar.flip = false; else if (fx < -0.15) avatar.flip = true;
       const speed = dt > 0 && Math.hypot(avatar.x - ox, avatar.z - oz) < 2 ? Math.hypot(avatar.x - ox, avatar.z - oz) / dt : 0;
-      avatar.animator.update(dt, avatar.downed ? 0 : speed, this.now, Math.max(0, avatar.anim?.swing ?? 0), avatar.anim?.roll ?? 0);
+      avatar.animator.update(dt, avatar.downed ? 0 : speed, this.now, avatar.anim ?? {});
       return avatar;
     });
     for (const id of [...this.avatars.keys()]) if (!seen.has(id)) this.avatars.delete(id);

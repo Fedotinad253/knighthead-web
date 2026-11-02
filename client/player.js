@@ -51,13 +51,15 @@ export class LocalPlayer {
     const a = this.attack, s = a.step;
     return a.time < s.windup ? 'windup' : a.time < s.windup + s.active ? 'active' : 'recovery';
   }
-  /** Взмах руки для анимации: 0 → 1 к удару → 0 к концу. */
-  get swing() {
-    if (!this.attack) return 0;
-    const a = this.attack, s = a.step;
-    if (a.time < s.windup) return -0.35 * (a.time / Math.max(0.01, s.windup));
-    const t = (a.time - s.windup) / Math.max(0.01, s.active + s.recovery);
-    return Math.max(0, 1 - t) * (t < 0.2 ? t / 0.2 : 1);
+  /** Где сейчас удар для анимации: [стадия, вид, номер]. Стадия: 0..1 — замах, 1..2 — удар, 2..3 — возврат. */
+  get attackStage() {
+    const a = this.attack;
+    if (!a) return null;
+    const s = a.step, t = a.time;
+    const stage = t < s.windup ? t / Math.max(0.001, s.windup)
+      : t < s.windup + s.active ? 1 + (t - s.windup) / Math.max(0.001, s.active)
+        : 2 + Math.min(1, (t - s.windup - s.active) / Math.max(0.001, s.recovery));
+    return [Math.round(stage * 1000) / 1000, a.kind, a.index];
   }
 
   teleport(x, z, fx, fz) {
@@ -135,7 +137,9 @@ export class LocalPlayer {
 
   anim() {
     return {
-      swing: Math.round(this.swing * 100) / 100,
+      atk: this.attackStage,
+      // Наклон прицела (градусы): лук и арбалет целятся вверх и вниз по экрану.
+      aim: Math.round(Math.asin(Math.max(-1, Math.min(1, this.attack ? this.aimZ : this.fz))) * 57.3),
       parry: this.parrying ? Math.round((this.parryUntil - this.now) * 100) / 100 : 0,
       blink: this.now < this.blinkUntil ? Math.round((this.blinkUntil - this.now) * 100) / 100 : 0,
       stun: this.stunned,
@@ -212,13 +216,7 @@ export class LocalPlayer {
       this.performHit();
       if (!this.attack) return;
     }
-    // Следующий удар лёгкого комбо можно начать уже в восстановлении.
-    if (a.kind === ATTACK.LIGHT && this.phase === 'recovery' && this.buffered === ATTACK.LIGHT && this.now - this.bufferedAt <= P.inputBuffer) {
-      this.buffered = null;
-      this.finishLightStep();
-      this.startAttack(ATTACK.LIGHT);
-      return;
-    }
+    // После удара задержка: следующий начнётся, только когда кончится восстановление (отменить его могут перекат и парирование).
     if (a.time < stepDuration(a.step)) return;
     if (a.kind === ATTACK.CARD_COMBO && a.index + 1 < this.weapon.cardCombo.length) {
       a.index++;

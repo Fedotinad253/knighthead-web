@@ -2,6 +2,7 @@
 // детали — картинки на них. Координаты скелета — пиксели исходного арта, Y вверх; поворот против часовой — плюс.
 // Персонаж нарисован смотрящим вправо; влево — отражается целиком.
 import { assets } from './assets.js';
+import { weaponStyle, attackPose, PARRY_POSE, STOW_POSE } from './weaponanim.js';
 
 // ---------------------------------------------------------------- Аффинные матрицы [a, b, c, d, e, f]
 
@@ -122,7 +123,7 @@ export class Rig {
    * Задевает ли круг рисунок персонажа — по настоящим очертаниям каждой детали в текущей позе
    * (прозрачные края картинок не в счёт). dx — метры вправо от ног по экрану, height — высота, r — радиус круга.
    */
-  hits(dx, height, r, options = {}, skip = ['weapon']) {
+  hits(dx, height, r, options = {}, skip = ['weapon', 'sheathed']) {
     this.compute();
     const base = this.local(options);
     for (const n of this.order) {
@@ -153,7 +154,7 @@ export class Rig {
   }
 
   /** Очертания хитбокса для отладки: по детали — список клеток маски в метрах (углы четырёхугольников). */
-  hitboxCells(options = {}, skip = ['weapon']) {
+  hitboxCells(options = {}, skip = ['weapon', 'sheathed']) {
     this.compute();
     const base = this.local(options), out = [];
     for (const n of this.order) {
@@ -232,6 +233,8 @@ export function createBogatyr() {
   nodes.push({ name: 'hand', parent: 'arm_front',
     pos: [(BOGATYR_FIST[0] - arm[1][0]) * arm[5][0], (BOGATYR_FIST[1] - arm[1][1]) * arm[5][1]], z: -0.006 });
   nodes.push({ name: 'weapon', parent: 'hand', pos: [0, 0], z: 0, image: null, pivot: [0.5, 0.5], size: [1, 1] });
+  // Оружие за спиной: рисуется между плащом и телом.
+  nodes.push({ name: 'sheathed', parent: 'torso', pos: [-110, 470], z: 0.02, image: null, pivot: [0.5, 0.5], size: [1, 1] });
   return new Rig(nodes, BOGATYR_HEIGHT / H);
 }
 
@@ -243,29 +246,64 @@ export function bogatyrPose(p) {
     spin: -360 * eased, spinCenter: 0.75, squash: roll > 0 ? 1 - 0.3 * Math.sin(roll * Math.PI) : 1 };
 }
 
-/** Анимация богатыря: шаг (поочерёдный подъём ног, как у персонажа анфас), руки, плащ, взмах при атаке. */
+/** Сколько секунд оружие остаётся в руке после боя и сколько рука убирает его за спину. */
+const WEAPON_HOLD = 1.6, STOW_TIME = 0.28;
+/** Как быстро поза догоняет цель: в ударе быстро, иначе мягко. */
+const POSE_RATE_ATTACK = 38, POSE_RATE_IDLE = 13;
+
+/** Анимация богатыря: шаг, плащ, удары своего для каждого оружия, оружие за спиной вне боя. */
 export class BogatyrAnimator {
   constructor(rig) {
     this.rig = rig;
     this.phase = 0;
     this.blend = 0;
+    this.weapon = null;
+    this.style = weaponStyle(null);
+    /** Текущая поза: плавно догоняет нужную, поэтому ничего не дёргается при смене удара. */
+    this.current = { a: 0, b: 0, t: 0, back: 0 };
+    this.heldUntil = -1;
+    this.stowUntil = -1;
+    this.inHand = false;
   }
 
   setWeapon(weapon) {
-    const node = this.rig.get('weapon');
-    if (!weapon) { node.image = null; return; }
+    const hand = this.rig.get('weapon'), back = this.rig.get('sheathed');
+    this.weapon = weapon;
+    this.inHand = false;
+    this.heldUntil = -1;
+    this.stowUntil = -1;
+    if (!weapon) { hand.image = null; back.image = null; this.resort(); return; }
+    this.style = weaponStyle(weapon);
     const image = assets.image(weapon.sprite);
     const h = weapon.height / this.rig.k;
     const aspect = image?.naturalWidth ? image.naturalWidth / image.naturalHeight : 0.25;
-    node.image = weapon.sprite;
-    node.size = [h * aspect, h];
-    node.pivot = weapon.grip;
-    // Порядок рисования мог измениться (картинка появилась впервые).
-    this.rig.order = this.rig.nodes.filter((n) => n.image).sort((a, b) => b.worldZ - a.worldZ);
+    const sx = this.style.mirror ? -1 : 1;
+    for (const node of [hand, back]) {
+      node.image = weapon.sprite;
+      node.size = [h * aspect, h];
+      node.pivot = weapon.grip;
+      node.scale = [sx, 1];
+    }
+    back.rot = this.style.onBack - this.style.natural;
+    this.resort();
   }
 
-  update(dt, speed, now, attack = 0, roll = 0) {
-    const k = this.rig.k;
+  /** Порядок рисования мог измениться (картинка появилась впервые). */
+  resort() { this.rig.order = this.rig.nodes.filter((n) => n.image).sort((a, b) => b.worldZ - a.worldZ); }
+
+  update(dt, speed, now, anim = {}) {
+    const k = this.rig.k, roll = anim.roll ?? 0, atk = anim.atk ?? null, parry = anim.parry > 0;
+    // Удар или парирование — оружие в руке; потом подержит и уберёт за спину.
+    const fighting = atk || parry;
+    if (fighting) { this.heldUntil = now + WEAPON_HOLD; this.stowUntil = -1; this.inHand = true; }
+    else if (this.inHand && now >= this.heldUntil) {
+      if (this.stowUntil < 0) this.stowUntil = now + STOW_TIME;
+      if (now >= this.stowUntil) { this.inHand = false; this.stowUntil = -1; }
+    }
+    const handNode = this.rig.get('weapon'), backNode = this.rig.get('sheathed');
+    handNode.visible = this.inHand;
+    backNode.visible = !this.inHand;
+
     if (roll > 0) {
       // Перекат: ноги и руки поджаты к телу.
       const tuck = Math.sin(Math.min(1, roll) * Math.PI);
@@ -283,11 +321,31 @@ export class BogatyrAnimator {
     const lift = 0.09 / k;
     this.rig.pose('leg_front', step * 5, 0, Math.max(0, step) * lift);
     this.rig.pose('leg_back', -step * 5, 0, Math.max(0, -step) * lift);
-    // Взмах передней рукой при атаке: 0 → 1 → 0 за удар.
-    this.rig.pose('arm_front', -step * 9 + attack * 75);
-    this.rig.pose('arm_back', step * 9);
-    this.rig.pose('cape', Math.sin(this.phase - 0.8) * 4 * this.blend + Math.sin(now * 1.3) * 0.8);
-    this.rig.pose('torso', attack * -6, 0, Math.abs(Math.cos(this.phase)) * (0.012 / k) * this.blend);
+
+    // К какой позе идём: удар, парирование, стойка с оружием, убирает за спину или просто шагает.
+    const style = this.style;
+    const aim = style.aims && this.inHand ? (anim.aim ?? 0) * 0.6 : 0;
+    let target;
+    if (atk) target = attackPose(style, atk[1], atk[2], atk[0]);
+    else if (parry) target = PARRY_POSE;
+    else if (this.stowUntil >= 0) target = STOW_POSE;
+    else if (this.inHand) target = style.ready;
+    else target = { a: 0, b: this.current.b, t: 0, back: 0 };
+    const rate = 1 - Math.exp(-dt * (atk ? POSE_RATE_ATTACK : POSE_RATE_IDLE));
+    const c = this.current;
+    c.a += (target.a + aim - c.a) * rate;
+    c.b += (target.b + aim - c.b) * rate;
+    c.t += (target.t - c.t) * rate;
+    c.back += (target.back - c.back) * rate;
+
+    // В покое руки качаются при ходьбе, в ударе почти не качаются.
+    const swing = fighting ? 0.25 : 1;
+    this.rig.pose('arm_front', c.a - step * 9 * swing);
+    this.rig.pose('arm_back', c.back + step * 9 * swing);
+    this.rig.pose('cape', Math.sin(this.phase - 0.8) * 4 * this.blend + Math.sin(now * 1.3) * 0.8 - c.t * 0.5);
+    this.rig.pose('torso', c.t, 0, Math.abs(Math.cos(this.phase)) * (0.012 / k) * this.blend);
+    // Куда смотрит оружие на экране не зависит от руки и корпуса: вычитаем их поворот.
+    this.rig.pose('weapon', c.b - c.a - c.t - style.natural);
   }
 }
 
