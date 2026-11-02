@@ -1,8 +1,11 @@
 // Данные игры — общие для сервера и браузера. Цифры перенесены из Unity-версии (ассеты оружия, GameRegistry).
 
-const melee = (damage, windup, active, recovery, range, arc) => ({ damage, windup, active, recovery, range, arc, projectile: false });
+/** Общий множитель урона всего оружия: одна цифра, чтобы подкручивать баланс. */
+const WEAPON_DAMAGE = 1.6;
+const scaled = (damage) => Math.round(damage * WEAPON_DAMAGE);
+const melee = (damage, windup, active, recovery, range, arc) => ({ damage: scaled(damage), windup, active, recovery, range, arc, projectile: false });
 const shot = (damage, windup, recovery, speed, { count = 1, spread = 0, pierce = false, lifetime = 1 } = {}) =>
-  ({ damage, windup, active: 0.02, recovery, projectile: true, speed, count, spread, pierce, lifetime });
+  ({ damage: scaled(damage), windup, active: 0.02, recovery, projectile: true, speed, count, spread, pierce, lifetime });
 
 export const stepDuration = (s) => s.windup + s.active + s.recovery;
 
