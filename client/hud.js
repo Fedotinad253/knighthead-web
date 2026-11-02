@@ -176,9 +176,13 @@ export class Hud {
       const local = game.local;
       $('dash').classList.toggle('off', now < local.nextRoll);
       $('parry').classList.toggle('off', now < local.parryReadyAt && !local.parrying);
+      // Все карты набраны — готов ультимейт.
+      const weapon = WEAPONS[me.weapon];
+      const ready = weapon && me.cards >= CARDS.max - 1e-3;
+      $('gear-ult').textContent = ready ? `${keyName(input.bindings.card[0])} + ${keyName(input.bindings.heavy[0])} — ${weapon.ultimateName}!` : '';
       // Снаряжение из-под камня: способность с перезарядкой и оберег.
       const ability = ABILITIES[me.ability], magic = MAGIC[me.magic], charm = CHARMS[me.charm];
-      $('gear').hidden = !ability && !magic && !charm;
+      $('gear').hidden = !ability && !magic && !charm && !ready;
       const magicCooldown = me.magicCooldown ?? 0;
       $('gear-magic').textContent = magic ? `${keyName(input.bindings.magic[0])} — ${magic.name}${magicCooldown > 0 ? `: ${Math.ceil(magicCooldown)} с` : ''}` : '';
       $('gear-magic').parentElement.classList.toggle('off', magicCooldown > 0);
@@ -220,6 +224,13 @@ export class Hud {
         $('hut-name').textContent = hut.fallen ? 'Избушка упала: бей Ягу!' : 'Избушка';
         $('hut-hp').style.width = `${Math.max(0, hut.hp / hut.max) * 100}%`;
       }
+      // Что висит на боссе.
+      const status = game.latest?.status;
+      const effects = [];
+      if (status?.stun > 0) effects.push(`Оглушён ${Math.ceil(status.stun)} с`);
+      if (status?.bleed > 0) effects.push(`Кровотечение ×${status.stacks} ${Math.ceil(status.bleed)} с`);
+      if (status?.burn > 0) effects.push(`Горит ${Math.ceil(status.burn)} с`);
+      $('boss-status').textContent = effects.join(' · ');
       const curses = (session?.curses ?? []).map((c) => CURSES[c]?.name).filter(Boolean);
       $('boss-curses').textContent = curses.length ? `Проклятия: ${curses.join(', ')}` : '';
     }
@@ -249,7 +260,7 @@ export class Hud {
     const move = ['up', 'left', 'down', 'right'].map(k).join('');
     $('hint').textContent = onMap
       ? (game.session.stoneOpen ? `1 / 2 — выбрать сложность     ${k('back')} — отойти` : `${move} — бежать избушкой     ${k('interact')} — в бой у логова     ${k('back')} — отойти от карты`)
-      : `${k('light')}/${k('heavy')} — атаки   ${k('card')} — карта   ${k('dash')} — перекат   ${k('parry')} — парирование   ${k('ability')} — способность   ${k('magic')} — магия   ${k('interact')} — действие   ${k('help')} — управление   ${k('debug')} — отладка`;
+      : `${k('light')}/${k('heavy')} — атаки   ${k('card')}+${k('light')} — удар за карту   ${k('card')}+${k('heavy')} — ультимейт   ${k('dash')} — перекат   ${k('parry')} — парирование   ${k('ability')} — способность   ${k('magic')} — магия   ${k('interact')} — действие   ${k('help')} — управление   ${k('debug')} — отладка`;
   }
 
   updateMap(onMap) {
@@ -315,7 +326,12 @@ export class Hud {
         };
       }
     };
-    const weapon = (w) => ({ name: WEAPONS[w].name, description: WEAPONS[w].description, icon: WEAPONS[w].sprite });
+    // В подсказке оружия — его удар за карту, ультимейт и комбо (Л — лёгкий, Т — тяжёлый).
+    const combo = (seq) => [...seq].map((c) => (c === 'L' ? 'Л' : 'Т')).join('');
+    const weapon = (w) => {
+      const data = WEAPONS[w];
+      return { name: data.name, icon: data.sprite, description: `${data.description} Карта — ${data.cardName}: ${data.cardText}. Ультимейт — ${data.ultimateName}: ${data.ultimateText}. Комбо: ${data.finishers.map((f) => `${combo(f.seq)} — ${f.name}`).join(', ')}.` };
+    };
     fill('loadout-weapons', offer.weapons, 'weapon', weapon, 'weapon');
     fill('loadout-abilities', offer.abilities, 'ability', (a) => ABILITIES[a]);
     fill('loadout-magic', offer.magic, 'magic', (a) => MAGIC[a]);

@@ -19,6 +19,8 @@ export class LocalPlayer {
     this.game = game;
     this.x = 0; this.z = 0; this.vx = 0; this.vz = 0;
     this.fx = 0; this.fz = 1;
+    this.dashUntil = 0; this.dashX = 0; this.dashZ = 0; this.dashSpeed = 0;
+    this.comboSeq = '';
     this.rollStart = -10; this.rollEnd = 0; this.nextRoll = 0; this.rollX = 0; this.rollZ = 1;
     this.stunnedUntil = 0;
     this.attack = null;
@@ -96,7 +98,10 @@ export class LocalPlayer {
       if (locked || me.downed) this.cancelAttack();
     } else {
       if (input.dashPressed) this.tryRoll();
-      if (this.rolling) {
+      if (this.now < this.dashUntil) {
+        // Рывок приёма: короткий и быстрый, направление не меняется.
+        this.vx = this.dashX * this.dashSpeed; this.vz = this.dashZ * this.dashSpeed;
+      } else if (this.rolling) {
         // Перекат как в Enter the Gungeon: быстрый старт, к концу замедляется; направление не меняется.
         const p = this.rollProgress;
         const v = P.rollDistance / (P.rollDuration * 0.8) * (1 - 0.6 * p * p);
@@ -141,6 +146,7 @@ export class LocalPlayer {
   anim() {
     return {
       atk: this.attackStage,
+      spin: !!this.attack?.step.spin,
       // Наклон прицела (градусы): лук и арбалет целятся вверх и вниз по экрану.
       aim: Math.round(Math.asin(Math.max(-1, Math.min(1, this.attack ? this.aimZ : this.fz))) * 57.3),
       parry: this.parrying ? Math.round((this.parryUntil - this.now) * 100) / 100 : 0,
@@ -160,8 +166,9 @@ export class LocalPlayer {
 
   tryRoll() {
     // Перекат прерывает любое действие: замах, удар, восстановление.
-    if (this.now < this.nextRoll) return;
+    if (this.now < this.nextRoll || this.attack?.kind === ATTACK.ULTIMATE) return;
     this.cancelAttack();
+    this.dashUntil = 0;
     const [mx, mz] = this.game.input.move;
     if (Math.hypot(mx, mz) > 0.05) { this.rollX = mx; this.rollZ = mz; } else { this.rollX = this.fx; this.rollZ = this.fz; }
     this.setFacing(this.rollX, this.rollZ);
@@ -195,10 +202,14 @@ export class LocalPlayer {
       return;
     }
 
-    if (input.lightPressed) this.buffer(input.cardHeld ? ATTACK.CARD_COMBO : ATTACK.LIGHT);
-    if (input.heavyPressed) this.buffer(input.cardHeld ? ATTACK.CARD_STRIKE : ATTACK.HEAVY);
+    if (input.lightPressed) this.buffer(input.cardHeld ? ATTACK.CARD : ATTACK.LIGHT);
+    if (input.heavyPressed) this.buffer(input.cardHeld ? ATTACK.ULTIMATE : ATTACK.HEAVY);
 
-    if (this.attack) this.tickAttack(dt);
+    if (this.attack) {
+      // Пока идёт удар, следующее нажатие ждёт своей очереди — так собираются комбо.
+      if (this.buffered !== null) this.bufferedAt = this.now;
+      this.tickAttack(dt);
+    }
     // Во время переката не бьём — нажатие сработает сразу после него (буфер ввода).
     if (this.rolling) { if (this.buffered !== null) this.bufferedAt = this.now; return; }
     if (!this.attack && this.buffered !== null && this.now - this.bufferedAt <= P.inputBuffer) {
@@ -221,13 +232,17 @@ export class LocalPlayer {
     }
     // После удара задержка: следующий начнётся, только когда кончится восстановление (отменить его могут перекат и парирование).
     if (a.time < stepDuration(a.step)) return;
-    if (a.kind === ATTACK.CARD_COMBO && a.index + 1 < this.weapon.cardCombo.length) {
+    // Удар за карту и ультимейт могут быть из нескольких шагов.
+    const list = a.kind === ATTACK.CARD ? this.weapon.card : a.kind === ATTACK.ULTIMATE ? this.weapon.ultimate : null;
+    if (list && a.index + 1 < list.length) {
       a.index++;
-      a.step = this.weapon.cardCombo[a.index];
+      a.step = list[a.index];
       a.time = 0; a.hitDone = false;
       return;
     }
     if (a.kind === ATTACK.LIGHT) this.finishLightStep();
+    // После удара есть окно, чтобы продолжить цепочку.
+    this.comboExpire = this.now + this.weapon.comboWindow;
     this.attack = null;
   }
 
@@ -240,12 +255,38 @@ export class LocalPlayer {
   startAttack(kind) {
     const weapon = this.weapon;
     // Карт не хватает — обычная атака той же кнопкой.
-    if (kind === ATTACK.CARD_COMBO || kind === ATTACK.CARD_STRIKE) {
-      if ((this.me.cards ?? 0) - this.pendingCards < 1) kind = kind === ATTACK.CARD_COMBO ? ATTACK.LIGHT : ATTACK.HEAVY;
-      else { this.pendingCards += 1; this.game.send({ t: 'spendCard' }); }
+    if (kind === ATTACK.CARD || kind === ATTACK.ULTIMATE) {
+      const cost = kind === ATTACK.ULTIMATE ? CARDS.max : 1;
+      if ((this.me.cards ?? 0) - this.pendingCards < cost - 1e-3) kind = kind === ATTACK.CARD ? ATTACK.LIGHT : ATTACK.HEAVY;
+      else {
+        this.pendingCards += cost;
+        this.game.send({ t: 'spendCard', amount: cost });
+        this.comboSeq = '';
+        const name = kind === ATTACK.CARD ? weapon.cardName : weapon.ultimateName;
+        this.game.vfx.text(this.x, this.z, 2.9, name, kind === ATTACK.ULTIMATE ? '#ff9a3c' : '#ffd966', 1.4);
+        if (kind === ATTACK.ULTIMATE) {
+          // В ультимейт богатырь неуязвим и его нельзя прервать.
+          this.invulnerableUntil = this.now + weapon.ultimate.reduce((sum, step) => sum + stepDuration(step), 0);
+          this.game.view.shake(0.3, 0.3, this.now);
+        }
+      }
     }
-    if (kind === ATTACK.LIGHT && this.now > this.comboExpire) this.lightIndex = 0;
-    const index = kind === ATTACK.LIGHT ? this.lightIndex : 0;
+    if (this.now > this.comboExpire) { this.lightIndex = 0; this.comboSeq = ''; }
+    let index = kind === ATTACK.LIGHT ? this.lightIndex : 0;
+    if (kind === ATTACK.LIGHT || kind === ATTACK.HEAVY) {
+      // Цепочка нажатий: дошли до конца комбо — вместо обычного удара идёт его завершение.
+      const input = kind === ATTACK.LIGHT ? 'L' : 'H', seq = this.comboSeq + input;
+      const finisher = weapon.finishers.findIndex((f) => f.seq === seq);
+      if (finisher >= 0) {
+        kind = ATTACK.FINISHER;
+        index = finisher;
+        this.comboSeq = '';
+        this.lightIndex = 0;
+        this.game.vfx.text(this.x, this.z, 2.9, weapon.finishers[finisher].name, '#ffe9a8', 1.1);
+      } else {
+        this.comboSeq = weapon.finishers.some((f) => f.seq.startsWith(seq)) ? seq : input;
+      }
+    }
     const [ax, az] = this.aim();
     this.aimX = ax; this.aimZ = az;
     this.setFacing(ax, az);
@@ -256,8 +297,8 @@ export class LocalPlayer {
 
   performHit() {
     const a = this.attack, step = a.step, game = this.game;
-    const card = a.kind === ATTACK.CARD_COMBO || a.kind === ATTACK.CARD_STRIKE;
-    if (a.kind === ATTACK.CARD_COMBO || step.projectile) {
+    const card = a.kind === ATTACK.CARD || a.kind === ATTACK.ULTIMATE;
+    if (card || step.projectile) {
       [this.aimX, this.aimZ] = this.aim();
       this.setFacing(this.aimX, this.aimZ);
     }
@@ -279,8 +320,14 @@ export class LocalPlayer {
       return;
     }
 
+    if (step.dash) {
+      this.dashUntil = this.now + 0.14;
+      this.dashSpeed = step.dash / 0.14;
+      this.dashX = this.aimX; this.dashZ = this.aimZ;
+    }
     if (step.projectile) {
-      game.send({ t: 'fire', x: r2(this.x + this.aimX * 0.6), z: r2(this.z + this.aimZ * 0.6), dx: this.aimX, dz: this.aimZ, kind: a.kind, step: a.index });
+      const [tx, tz] = game.view.unproject(game.input.mouseX, game.input.mouseY);
+      game.send({ t: 'fire', x: r2(this.x + this.aimX * 0.6), z: r2(this.z + this.aimZ * 0.6), dx: this.aimX, dz: this.aimZ, kind: a.kind, step: a.index, tx: r2(tx), tz: r2(tz) });
       blip('shot');
       return;
     }
@@ -289,6 +336,10 @@ export class LocalPlayer {
     game.vfx.slash(this.x, this.z, this.aimX, this.aimZ, step.range, step.arc, color);
     game.send({ t: 'fx', fx: 'slash', x: r2(this.x), z: r2(this.z), dx: this.aimX, dz: this.aimZ, range: step.range, arc: step.arc, color });
     blip('slash');
+    if (step.ring) {
+      game.vfx.flash(this.x, this.z, step.range * 0.85, 'ring');
+      game.view.shake(step.range > 5 ? 0.6 : 0.3, 0.3, this.now);
+    }
 
     // Попадание: расстояние до края цели и угол дуги.
     const reaches = (x, z, r) => {
@@ -304,11 +355,11 @@ export class LocalPlayer {
     // Яга на крыше: бьём по ногам избушки. В воздухе ближним оружием не достать.
     const hut = boss.hut;
     if (hut?.active && !hut.fallen && boss.onRoof) {
-      if (hut.legs.some((leg) => reaches(leg.x, leg.z, leg.r))) game.send({ t: 'hitHut', damage: step.damage, fills: !card });
+      if (hut.legs.some((leg) => reaches(leg.x, leg.z, leg.r))) game.send({ t: 'hitHut', damage: step.damage, fills: !card, kind: a.kind, step: a.index });
       return;
     }
     if (boss.airborne) return;
-    if (reaches(boss.x, boss.z, boss.radius ?? 0.55)) game.send({ t: 'hit', damage: step.damage, fills: !card });
+    if (reaches(boss.x, boss.z, boss.radius ?? 0.55)) game.send({ t: 'hit', damage: step.damage, fills: !card, kind: a.kind, step: a.index });
   }
 
   onCardsChanged() { this.pendingCards = 0; }
@@ -344,7 +395,7 @@ export class LocalPlayer {
 
   updateDefense() {
     const game = this.game;
-    if (game.input.parryPressed && this.now >= this.parryReadyAt && !this.stunned && !game.dialogueOpen) {
+    if (game.input.parryPressed && this.now >= this.parryReadyAt && !this.stunned && !game.dialogueOpen && this.attack?.kind !== ATTACK.ULTIMATE) {
       this.parryUntil = this.now + P.parryWindow;
       this.parryReadyAt = this.parryUntil + P.parryCooldown;
       // Парирование, как и перекат, прерывает текущую атаку в любой фазе.

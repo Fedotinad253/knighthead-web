@@ -286,6 +286,8 @@ class Game {
         avatar.anim = pb.anim ?? {};
       }
       if (fx > 0.15) avatar.flip = false; else if (fx < -0.15) avatar.flip = true;
+      // Круговой приём: богатырь вертится.
+      if (avatar.anim?.spin) avatar.flip = Math.floor(this.now * 14) % 2 === 0;
       const speed = dt > 0 && Math.hypot(avatar.x - ox, avatar.z - oz) < 2 ? Math.hypot(avatar.x - ox, avatar.z - oz) / dt : 0;
       avatar.animator.update(dt, avatar.downed ? 0 : speed, this.now, avatar.anim ?? {});
       return avatar;

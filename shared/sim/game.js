@@ -2,7 +2,7 @@
 // (одиночная игра), и на Node-сервере (кооп). Здесь решается: где мы (таверна, карта, арена), где избушка, какой босс и сложность, урон, карты, снаряды.
 // Богатырём управляет его игрок у себя в браузере и присылает позицию (отзывчиво, как Owner-режим в Unity);
 // попадания по себе он тоже определяет сам — так уклонение и парирование честны по тому, что он видит.
-import { WEAPONS, BOSSES, DIFFICULTIES, WORLDS, CARDS, PLAYER, SESSION, YAGA, ABILITIES, MAGIC, RANKS, RANK_S_PLUS, rateFight, attackStep, ATTACK } from '../data.js';
+import { WEAPONS, BOSSES, DIFFICULTIES, WORLDS, CARDS, PLAYER, SESSION, YAGA, ABILITIES, MAGIC, RANKS, RANK_S_PLUS, rateFight, attackStep, ATTACK, STATUS } from '../data.js';
 import { emptyProgress, totalPoints } from '../progress.js';
 import { SCENES, MAP, clampOnMap, nodeNear, nearestInteractable } from '../scenes.js';
 import { Likho } from './likho.js';
@@ -117,18 +117,19 @@ export class Game {
 
       case 'hit': { // ближний удар по боссу (попадание посчитал игрок)
         if (!this.boss || player.downed || this.boss.meleeImmune) break;
-        this.damageBoss(player, Math.min(m.damage, 200), m.fills);
+        this.damageBoss(player, Math.min(m.damage, 500), m.fills, this.stepEffect(player, m));
         break;
       }
       case 'hitHut': {
         if (player.downed || !this.boss?.hitHut) break;
-        const dealt = this.boss.hitHut(Math.min(m.damage, 200));
+        const dealt = this.boss.hitHut(Math.min(m.damage, 500));
         if (m.fills) this.addCards(player, dealt / CARDS.damagePerCard);
+        if (dealt > 0) this.applyStatus(this.stepEffect(player, m));
         break;
       }
       case 'struggle': this.struggle(player); break;
       case 'fire': this.firePlayer(player, m); this.boss?.hear?.(player.x, player.z); break;
-      case 'spendCard': player.cards = Math.max(0, player.cards - 1); break;
+      case 'spendCard': player.cards = Math.max(0, player.cards - Math.min(Math.max(m.amount | 0, 1), CARDS.max)); break;
       case 'fx':
         this.broadcast({ ...m, id: player.id }, player);
         if (m.fx === 'slash') this.boss?.hear?.(player.x, player.z);
@@ -289,12 +290,61 @@ export class Game {
   addCards(player, amount) { player.cards = Math.min(CARDS.max, player.cards + amount); }
 
   /** Урон богатыря боссу. Медвежий коготь — в полтора раза сильнее по уставшему, оглушённому, обессилевшему. */
-  damageBoss(player, amount, fills) {
+  damageBoss(player, amount, fills, effect = null) {
     if (!this.boss) return 0;
-    if (player?.charm === 'bear' && this.boss.vulnerable) amount *= 1.5;
+    if (player?.charm === 'bear' && (this.boss.vulnerable || this.bossStunned)) amount *= 1.5;
     const dealt = this.boss.applyDamage(amount);
     if (fills && player) this.addCards(player, dealt / CARDS.damagePerCard);
+    if (dealt > 0) this.applyStatus(effect);
     return dealt;
+  }
+
+  /** Что накладывает удар: смотрим в данных оружия, а не верим сообщению. */
+  stepEffect(player, m) {
+    const weapon = WEAPONS[player.weapon];
+    return weapon && Number.isInteger(m.kind) ? attackStep(weapon, m.kind, m.step | 0)?.effect ?? null : null;
+  }
+
+  get bossStunned() { return this.clock.now < (this.bossStatus?.stunUntil ?? 0); }
+
+  /** Наложить на босса кровотечение, огонь или оглушение. Оглушение после себя какое-то время не действует. */
+  applyStatus(effect) {
+    const boss = this.boss, now = this.clock.now;
+    if (!effect || !boss || boss.dead || boss.cutscene) return;
+    const status = this.bossStatus ??= {};
+    if (effect === 'bleed') {
+      const stacks = now < (status.bleedUntil ?? 0) ? status.bleedStacks : 0;
+      status.bleedStacks = Math.min(stacks + 1, STATUS.bleed.maxStacks);
+      status.bleedUntil = now + STATUS.bleed.duration;
+      status.bleedNext ??= now + STATUS.bleed.tick;
+      this.floatText(boss.x, boss.z, 3.2, 'Кровотечение!', '#ff5a5a', 1);
+    } else if (effect === 'burn') {
+      status.burnUntil = now + STATUS.burn.duration;
+      status.burnNext ??= now + STATUS.burn.tick;
+      this.floatText(boss.x, boss.z, 3.2, 'Горит!', '#ffa040', 1);
+    } else if (effect === 'stun') {
+      if (boss.transition || now < (status.stunImmuneUntil ?? 0)) return;
+      status.stunUntil = now + STATUS.stun.duration;
+      status.stunImmuneUntil = status.stunUntil + STATUS.stun.immunity;
+      // Застывает посреди действия: когти и бег избушки не ранят, пока оглушён.
+      boss.clawsOff?.();
+      if (boss.hut) { boss.hut.charging = false; boss.hut.moving = false; }
+      this.floatText(boss.x, boss.z, 3.2, 'Оглушён!', '#ffd94d', 1);
+    }
+  }
+
+  /** Такты кровотечения и огня. Яга на крыше неуязвима: урон идёт по избушке, по которой и попали. */
+  updateStatus(now) {
+    const status = this.bossStatus, boss = this.boss;
+    if (!status || !boss || boss.dead) return;
+    const tick = (until, next, config, damage) => {
+      if (now >= (status[until] ?? 0)) { status[next] = undefined; return; }
+      if (now < status[next]) return;
+      status[next] = now + config.tick;
+      if (boss.onRoof) boss.hitHut(damage); else boss.applyDamage(damage);
+    };
+    tick('bleedUntil', 'bleedNext', STATUS.bleed, STATUS.bleed.damage * (status.bleedStacks ?? 1));
+    tick('burnUntil', 'burnNext', STATUS.burn, STATUS.burn.damage);
   }
 
   // ---------------------------------------------------------------- Снаряжение и бытовая магия
@@ -543,6 +593,7 @@ export class Game {
     this.preparing = false;
     this.firstYaga = false;
     this.darkUntil = 0;
+    this.bossStatus = null;
     this.stats = null;
     this.decoy = null;
     this.effects = [];
@@ -706,14 +757,22 @@ export class Game {
     if (!weapon) return;
     const step = attackStep(weapon, m.kind, m.step);
     if (!step?.projectile) return;
+    if (step.rain) {
+      // Дождь стрел: падает в точку прицела, достаёт и летящих.
+      if (!Number.isFinite(m.tx) || !Number.isFinite(m.tz)) return;
+      const [x, z] = this.clampToBossArea(m.tx, m.tz);
+      const rain = this.addEffect('rain', x, z, step.rain.radius, step.rain.duration, player);
+      rain.damage = step.damage;
+      return;
+    }
     const count = Math.max(1, step.count);
     const [dx, dz] = normalize(m.dx, m.dz);
     for (let i = 0; i < count; i++) {
       const angle = count === 1 ? 0 : -step.spread / 2 + step.spread * (i / (count - 1));
       const [fx, fz] = rotateY(dx, dz, angle);
       this.projectiles.push({ id: this.nextId++, owner: player, x: m.x, z: m.z, vx: fx * step.speed, vz: fz * step.speed,
-        damage: step.damage, pierce: step.pierce, fills: m.kind === ATTACK.LIGHT || m.kind === ATTACK.HEAVY,
-        expire: this.clock.now + step.lifetime, hit: false });
+        damage: step.damage, pierce: step.pierce, fills: m.kind !== ATTACK.CARD && m.kind !== ATTACK.ULTIMATE,
+        effect: step.effect ?? null, big: !!step.big, expire: this.clock.now + step.lifetime, hit: false });
     }
   }
 
@@ -732,7 +791,9 @@ export class Game {
     if (this.state === SESSION.MAP) this.moveHut(dt);
     this.updateDrags(dt);
     if (this.boss) {
-      this.boss.update();
+      this.updateStatus(this.clock.now);
+      // Оглушённый босс замирает: его действия просто ждут.
+      if (!this.bossStunned) this.boss.update();
       // Проверка без людей: боссу постепенно наносится урон.
       if (this.flags.debugwin && !this.fightResolved) {
         this.debugTimer = (this.debugTimer ?? 0) + dt;
@@ -750,6 +811,12 @@ export class Game {
     for (const e of this.effects) {
       // Облако пыли ползёт и растёт.
       if (e.grow) { e.r += e.grow * dt; e.x += e.vx * dt; e.z += e.vz * dt; }
+      // Дождь стрел бьёт всё под собой, в том числе летящих.
+      if (e.kind === 'rain' && now >= e.nextTick && this.boss) {
+        e.nextTick = now + 0.25;
+        if (this.boss.onRoof) { if (this.boss.hutLegs?.some((l) => Math.hypot(l.x - e.x, l.z - e.z) < e.r + l.r)) this.boss.hitHut(e.damage); }
+        else if (Math.hypot(this.boss.x - e.x, this.boss.z - e.z) < e.r + (this.boss.radius ?? 0.5)) this.damageBoss(e.owner, e.damage, false);
+      }
       if (e.kind !== 'coals' || now < e.nextTick || !this.boss) continue;
       e.nextTick = now + 0.5;
       if (!this.boss.airborne && Math.hypot(this.boss.x - e.x, this.boss.z - e.z) < e.r + (this.boss.radius ?? 0.5))
@@ -764,11 +831,11 @@ export class Game {
       if (hut?.active && !hut.fallen && this.boss.onRoof) {
         // Яга на крыше: стрелы попадают только по ногам избушки, остальные летят мимо.
         if (!this.boss.arrowHitsLeg(p.x, p.z)) continue;
-        this.boss.hitHut(p.damage);
+        if (this.boss.hitHut(p.damage) > 0) this.applyStatus(p.effect);
         p.hitBoss = true;
         if (!p.pierce) p.expire = 0;
       } else if (this.boss.arrowHits ? this.boss.arrowHits(p.x, p.z) : Math.hypot(p.x - this.boss.x, p.z - this.boss.z) < this.boss.radius + 0.25) {
-        this.damageBoss(p.owner, p.damage, p.fills);
+        this.damageBoss(p.owner, p.damage, p.fills, p.effect);
         p.hitBoss = true;
         if (!p.pierce) p.expire = 0;
       }
@@ -799,6 +866,17 @@ export class Game {
     this.hut = clampOnMap(this.hut[0] + dx * k, this.hut[1] + dz * k, (w) => this.isWorldUnlocked(w));
   }
 
+  /** Что сейчас висит на боссе (секунд осталось). */
+  statusSnapshot(now) {
+    const s = this.bossStatus;
+    if (!s || !this.boss) return null;
+    return {
+      bleed: now < (s.bleedUntil ?? 0) ? r2(s.bleedUntil - now) : 0, stacks: s.bleedStacks ?? 0,
+      burn: now < (s.burnUntil ?? 0) ? r2(s.burnUntil - now) : 0,
+      stun: now < (s.stunUntil ?? 0) ? r2(s.stunUntil - now) : 0,
+    };
+  }
+
   snapshot() {
     const now = this.clock.now;
     return {
@@ -815,13 +893,14 @@ export class Game {
       effects: this.effects.map((e) => ({ id: e.id, kind: e.kind, x: r2(e.x), z: r2(e.z), r: r2(e.r), left: r2(e.expire - now) })),
       cut: [...this.cutBushes],
       burntBushes: [...this.burntBushes],
+      status: this.statusSnapshot(now),
       burnt: [...this.burntTrees],
       decoy: this.activeDecoy() ? { x: r2(this.decoy.x), z: r2(this.decoy.z), owner: this.decoy.owner, left: r2(this.decoy.expire - now) } : null,
       boss: this.boss?.snapshot() ?? null,
       hazards: this.hazards.map((h) => h.type === 'proj'
         ? { id: h.id, type: 'proj', look: h.look, wide: h.wide, x: r2(h.x), z: r2(h.z), y: h.y, vx: r2(h.vx), vz: r2(h.vz), r: h.r, parry: h.parryable, dmg: h.damage, keep: !h.consume }
         : { id: h.id, type: 'zone', kind: h.kind, look: h.look, x: r2(h.x), z: r2(h.z), r: h.r, dmg: h.damage, stun: h.stun }),
-      arrows: this.projectiles.map((p) => ({ id: p.id, x: r2(p.x), z: r2(p.z), vx: r2(p.vx), vz: r2(p.vz) })),
+      arrows: this.projectiles.map((p) => ({ id: p.id, x: r2(p.x), z: r2(p.z), vx: r2(p.vx), vz: r2(p.vz), big: p.big, burn: p.effect === 'burn' })),
     };
   }
 }

@@ -3,15 +3,18 @@
 /** Общий множитель урона всего оружия: одна цифра, чтобы подкручивать баланс. */
 const WEAPON_DAMAGE = 1.6;
 const scaled = (damage) => Math.round(damage * WEAPON_DAMAGE);
-const melee = (damage, windup, active, recovery, range, arc) => ({ damage: scaled(damage), windup, active, recovery, range, arc, projectile: false });
-const shot = (damage, windup, recovery, speed, { count = 1, spread = 0, pierce = false, lifetime = 1 } = {}) =>
-  ({ damage: scaled(damage), windup, active: 0.02, recovery, projectile: true, speed, count, spread, pierce, lifetime });
+const melee = (damage, windup, active, recovery, range, arc, extra = {}) => ({ damage: scaled(damage), windup, active, recovery, range, arc, projectile: false, ...extra });
+const shot = (damage, windup, recovery, speed, { count = 1, spread = 0, pierce = false, lifetime = 1, ...extra } = {}) =>
+  ({ damage: scaled(damage), windup, active: 0.02, recovery, projectile: true, speed, count, spread, pierce, lifetime, ...extra });
 
 export const stepDuration = (s) => s.windup + s.active + s.recovery;
 
 /**
- * Оружие (классов нет — стиль боя задаёт оружие). У каждого: лёгкое комбо, тяжёлая атака,
- * карта + лёгкая = особое комбо (больше всего урона), карта + тяжёлая = мгновенный сильный удар.
+ * Оружие (классов нет — стиль боя задаёт оружие).
+ * light — серия лёгких, heavy — тяжёлый. finishers — комбо: цепочка нажатий (L — лёгкий, H — тяжёлый) завершается своим приёмом.
+ * card — удар за 1 карту, у каждого оружия свой; ultimate — за все карты. Может быть из нескольких шагов.
+ * Шаг может иметь: effect ('bleed', 'burn', 'stun') — что накладывает; dash — рывок вперёд, м; ring — удар о землю; spin — крутится;
+ * big — большой снаряд; rain — дождь стрел в точку {radius, duration}.
  * sprite — картинка; grip — где её держит кулак (доли картинки, y=0 — низ); height — высота, м; description — подсказка при выборе.
  */
 export const WEAPONS = [
@@ -19,55 +22,94 @@ export const WEAPONS = [
     name: 'Меч', description: 'Ближний бой. Быстрые ровные удары, можно двигаться на ходу.', sprite: 'weapons/Sword.png', grip: [0.5, 0.85], height: 1.05, comboWindow: 0.45, moveWhileAttacking: 0.7,
     light: [melee(12, 0.08, 0.08, 0.30, 2.3, 120), melee(12, 0.08, 0.08, 0.30, 2.3, 120), melee(20, 0.12, 0.10, 0.50, 2.5, 150)],
     heavy: melee(35, 0.35, 0.10, 0.60, 2.8, 60),
-    cardCombo: [melee(20, 0.04, 0.06, 0.08, 2.5, 140), melee(20, 0.04, 0.06, 0.08, 2.5, 140), melee(25, 0.04, 0.06, 0.08, 2.5, 140),
-      melee(25, 0.04, 0.06, 0.10, 2.5, 140), melee(50, 0.15, 0.10, 0.40, 3.2, 360)],
-    cardStrike: melee(90, 0.06, 0.08, 0.55, 3.2, 90),
+    finishers: [
+      { name: 'Рассечение', seq: 'LLH', step: melee(30, 0.14, 0.10, 0.60, 3.0, 360) },
+      { name: 'Выпад', seq: 'LH', step: melee(26, 0.12, 0.10, 0.55, 3.6, 60, { dash: 3.5 }) },
+      { name: 'Встречный', seq: 'HL', step: melee(22, 0.05, 0.08, 0.40, 2.6, 130) },
+    ],
+    cardName: 'Богатырский удар', cardText: 'очень мощный удар с рывком',
+    card: [melee(110, 0.12, 0.10, 0.60, 3.2, 90, { dash: 2 })],
+    ultimateName: 'Кладенец', ultimateText: 'два круговых удара и три летящие волны',
+    ultimate: [melee(45, 0.20, 0.10, 0.15, 3.5, 360), melee(45, 0.10, 0.10, 0.15, 3.5, 360), shot(80, 0.15, 0.70, 26, { count: 3, spread: 30, pierce: true, lifetime: 0.8, big: true })],
   },
   {
     name: 'Топор', description: 'Ближний бой. Медленнее меча, зато бьёт сильнее и шире.', sprite: 'weapons/Axe.png', grip: [0.29, 0.22], height: 0.95, comboWindow: 0.55, moveWhileAttacking: 0.55,
     light: [melee(18, 0.14, 0.10, 0.45, 2.4, 140), melee(26, 0.18, 0.10, 0.60, 2.6, 160)],
     heavy: melee(50, 0.50, 0.12, 0.75, 2.8, 180),
-    cardCombo: [melee(30, 0.08, 0.08, 0.12, 2.6, 160), melee(35, 0.08, 0.08, 0.12, 2.6, 160), melee(40, 0.10, 0.08, 0.15, 2.6, 200),
-      melee(60, 0.20, 0.12, 0.45, 3.0, 360)],
-    cardStrike: melee(110, 0.08, 0.10, 0.65, 3.0, 120),
+    finishers: [
+      { name: 'Вихрь', seq: 'LLH', step: melee(32, 0.16, 0.12, 0.65, 3.0, 360, { spin: true }) },
+      { name: 'Рубка сверху', seq: 'HL', step: melee(34, 0.18, 0.10, 0.60, 3.0, 90) },
+      { name: 'Раскол', seq: 'HH', step: melee(75, 0.35, 0.12, 0.85, 3.2, 120) },
+    ],
+    cardName: 'Кровопускание', cardText: 'рана кровоточит, удары складываются',
+    card: [melee(45, 0.12, 0.10, 0.60, 3.0, 160, { effect: 'bleed' })],
+    ultimateName: 'Буря', ultimateText: 'долго крутится, рубя всё вокруг, и пускает кровь',
+    ultimate: [0, 1, 2, 3, 4, 5].map((i) => melee(38, 0.06, 0.10, i === 5 ? 0.50 : 0.06, 3.6, 360, { spin: true, effect: i === 5 ? 'bleed' : undefined })),
   },
   {
     name: 'Булава', description: 'Ближний бой. Самая медленная, тяжёлый удар бьёт вокруг себя.', sprite: 'weapons/Mace.png', grip: [0.5, 0.2], height: 0.9, comboWindow: 0.5, moveWhileAttacking: 0.5,
     light: [melee(15, 0.12, 0.10, 0.50, 2.3, 110), melee(15, 0.12, 0.10, 0.50, 2.3, 110), melee(28, 0.20, 0.12, 0.70, 2.8, 70)],
     heavy: melee(60, 0.55, 0.15, 0.85, 3.2, 360),
-    cardCombo: [melee(50, 0.15, 0.12, 0.20, 3.5, 360), melee(55, 0.15, 0.12, 0.20, 3.5, 360), melee(75, 0.25, 0.15, 0.50, 4.0, 360)],
-    cardStrike: melee(120, 0.08, 0.12, 0.70, 3.2, 100),
+    finishers: [
+      { name: 'Сотрясение', seq: 'LLH', step: melee(36, 0.22, 0.12, 0.75, 4.2, 360, { ring: true }) },
+      { name: 'Подброс', seq: 'LH', step: melee(30, 0.14, 0.10, 0.60, 2.6, 100) },
+      { name: 'Молот', seq: 'HH', step: melee(90, 0.45, 0.15, 0.95, 3.4, 120, { ring: true }) },
+    ],
+    cardName: 'Удар оземь', cardText: 'волна вокруг оглушает врага',
+    card: [melee(55, 0.20, 0.12, 0.70, 4.0, 360, { effect: 'stun', ring: true })],
+    ultimateName: 'Палица Святогора', ultimateText: 'огромный удар по всей округе, оглушает',
+    ultimate: [melee(200, 0.60, 0.15, 0.85, 8.0, 360, { effect: 'stun', ring: true })],
   },
   {
     name: 'Лук', description: 'Дальний бой. Частые слабые выстрелы, сильный — пробивает насквозь.', sprite: 'weapons/Bow.png', grip: [0.22, 0.5], height: 1.35, comboWindow: 0.3, moveWhileAttacking: 0.85,
     light: [shot(9, 0.10, 0.35, 30, { lifetime: 0.9 })],
     heavy: shot(35, 0.45, 0.55, 40, { pierce: true, lifetime: 1.2 }),
-    cardCombo: [shot(10, 0.06, 0.12, 32, { count: 5, spread: 30, lifetime: 0.8 }), shot(10, 0.06, 0.12, 32, { count: 5, spread: 30, lifetime: 0.8 }),
-      shot(10, 0.06, 0.25, 32, { count: 5, spread: 30, lifetime: 0.8 })],
-    cardStrike: shot(100, 0.05, 0.30, 50, { pierce: true, lifetime: 1.5 }),
+    finishers: [
+      { name: 'Тройной выстрел', seq: 'LLH', step: shot(8, 0.10, 0.50, 30, { count: 3, spread: 20, lifetime: 0.9 }) },
+      { name: 'Навылет', seq: 'HL', step: shot(20, 0.18, 0.50, 38, { pierce: true, lifetime: 1.2 }) },
+    ],
+    cardName: 'Град стрел', cardText: 'быстро выпускает много стрел вперёд',
+    card: [0, 1, 2, 3, 4, 5].map((i) => shot(8, 0.03, i === 5 ? 0.40 : 0.05, 34, { count: 3, spread: 14, lifetime: 0.8 })),
+    ultimateName: 'Дождь стрел', ultimateText: 'стрелы падают с неба туда, куда целишься, достают и в воздухе',
+    ultimate: [shot(14, 0.30, 0.60, 0, { rain: { radius: 3.5, duration: 3 }, lifetime: 0 })],
   },
   {
     name: 'Арбалет', description: 'Дальний бой. Редкие сильные болты, тяжёлый выстрел — тремя сразу.', sprite: 'weapons/Crossbow.png', grip: [0.38, 0.45], height: 0.42, comboWindow: 0.3, moveWhileAttacking: 0.7,
     light: [shot(20, 0.10, 0.65, 38)],
     heavy: shot(14, 0.40, 0.65, 34, { count: 3, spread: 20 }),
-    cardCombo: Array.from({ length: 6 }, (_, i) => shot(25, 0.03, i === 5 ? 0.30 : 0.07, 40)),
-    cardStrike: shot(105, 0.02, 0.35, 55, { pierce: true, lifetime: 1.3 }),
+    finishers: [
+      { name: 'Двойной болт', seq: 'LH', step: shot(12, 0.10, 0.60, 38, { count: 2, spread: 5 }) },
+      { name: 'Залп', seq: 'HH', step: shot(16, 0.20, 0.70, 36, { count: 3, spread: 12 }) },
+    ],
+    cardName: 'Зажигательный болт', cardText: 'поджигает врага',
+    card: [shot(40, 0.08, 0.70, 50, { lifetime: 1.3, effect: 'burn', big: true })],
+    ultimateName: 'Рогатина', ultimateText: 'огромный болт пробивает насквозь и поджигает',
+    ultimate: [shot(170, 0.35, 0.90, 55, { pierce: true, lifetime: 1.3, effect: 'burn', big: true })],
   },
 ];
 
-/** Вид атаки: лёгкая, тяжёлая, карта + лёгкая (серия), карта + тяжёлая (мгновенный удар). */
-export const ATTACK = { LIGHT: 0, HEAVY: 1, CARD_COMBO: 2, CARD_STRIKE: 3 };
+/** Вид атаки: лёгкая, тяжёлая, удар за карту, ультимейт, завершение комбо. */
+export const ATTACK = { LIGHT: 0, HEAVY: 1, CARD: 2, ULTIMATE: 3, FINISHER: 4 };
 
 export function attackStep(weapon, kind, index) {
+  const at = (list) => list[Math.min(Math.max(index, 0), list.length - 1)];
   switch (kind) {
-    case ATTACK.LIGHT: return weapon.light[Math.min(Math.max(index, 0), weapon.light.length - 1)];
+    case ATTACK.LIGHT: return at(weapon.light);
     case ATTACK.HEAVY: return weapon.heavy;
-    case ATTACK.CARD_COMBO: return weapon.cardCombo[Math.min(Math.max(index, 0), weapon.cardCombo.length - 1)];
-    default: return weapon.cardStrike;
+    case ATTACK.CARD: return at(weapon.card);
+    case ATTACK.ULTIMATE: return at(weapon.ultimate);
+    default: return at(weapon.finishers).step;
   }
 }
 
-/** Карты (аналог super-карт Cuphead): заполняются уроном и парированием. */
+/** Состояния врага от ударов: длительность, урон за такт (раз в tick секунд). Кровотечение складывается до maxStacks. */
+export const STATUS = {
+  bleed: { duration: 6, tick: 0.5, damage: 7, maxStacks: 3 },
+  burn: { duration: 5, tick: 0.5, damage: 10 },
+  stun: { duration: 2, immunity: 8 },
+};
+
+/** Карты (аналог super-карт Cuphead): заполняются уроном и парированием. Удар за карту стоит одну, ультимейт — все. */
 export const CARDS = { max: 5, damagePerCard: 150, perParry: 1 };
 
 export const WORLDS = [

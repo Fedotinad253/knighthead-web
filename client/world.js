@@ -100,8 +100,30 @@ export function drawWorld(game) {
   for (const p of game.players) if (p.dropped) view.label(p.dropped[0], p.dropped[1], 1.3, 'Подобрать', '#d973ff', 0.36);
   if (game.boss?.finisherReady) view.label(game.boss.x, game.boss.z, 3.4, `[${keyName(game.input.bindings.interact[0])}] ${game.boss.finisherLabel ?? 'Выколоть глаз'}`, '#ffd94d', 0.5);
   if (game.boss?.kind === 'dummy') view.label(game.boss.x, game.boss.z, 3.4, game.boss.name, '#ffe9a8', 0.4);
+  drawBossStatus(game);
   game.vfx.drawTop(view);
   if (game.showHitboxes) drawHitboxes(game);
+}
+
+/** Что видно на боссе: оглушение — звёзды, огонь — пламя, кровотечение — капли. */
+function drawBossStatus(game) {
+  const status = game.latest?.status, b = game.boss, view = game.view;
+  if (!status || !b || b.pose === 'Dead') return;
+  const y = b.onRoof ? 9 : b.airborne ? 5 : 3.2, now = game.now;
+  if (status.stun > 0) drawStars(view, b.x, b.z, y, now);
+  if (status.burn > 0) {
+    const [px, py] = view.project(b.x, b.z, b.onRoof ? 4 : 1);
+    drawFlat(view, 'yaga/fx_fire.png', px, py, 1.8, 0, Math.floor(now * 8) % 2 === 0);
+  }
+  if (status.bleed > 0) {
+    const ctx = view.ctx;
+    ctx.fillStyle = '#c21d1d';
+    for (let i = 0; i < 2 + status.stacks * 2; i++) {
+      const fall = (now * 1.4 + i * 0.41) % 1;
+      const [px, py] = view.project(b.x + Math.sin(i * 2.4) * 0.5, b.z, (b.onRoof ? 5 : 2) * (1 - fall));
+      ctx.beginPath(); ctx.arc(px, py, view.s * 0.07, 0, Math.PI * 2); ctx.fill();
+    }
+  }
 }
 
 /** Отладка: зоны урона (красные), тело босса (жёлтое), сам богатырь (зелёный). */
@@ -428,6 +450,18 @@ function drawOrb(view, h, now) {
 
 function drawArrow(view, a) {
   const ctx = view.ctx;
+  if (a.big) {
+    // Волна меча и большие болты: заметные, зажигательный — рыжий.
+    const l = Math.hypot(a.vx, a.vz) || 1;
+    const [bx, by] = view.project(a.x - a.vx / l * 0.7, a.z - a.vz / l * 0.7, 1);
+    const [fx, fy] = view.project(a.x + a.vx / l * 0.7, a.z + a.vz / l * 0.7, 1);
+    ctx.strokeStyle = a.burn ? '#ff9a3c' : '#fff3c4';
+    ctx.lineWidth = Math.max(4, view.s * 0.2);
+    ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(fx, fy); ctx.stroke();
+    ctx.lineCap = 'butt';
+    return;
+  }
   const l = Math.hypot(a.vx, a.vz) || 1;
   const [x0, y0] = view.project(a.x - a.vx / l * 0.35, a.z - a.vz / l * 0.35, 1);
   const [x1, y1] = view.project(a.x + a.vx / l * 0.35, a.z + a.vz / l * 0.35, 1);
@@ -449,7 +483,18 @@ function trapVisible(game, h) {
 function drawEffect(view, e, now) {
   const fade = Math.min(1, e.left / 0.8);
   const ctx = view.ctx;
-  if (e.kind === 'dust') {
+  if (e.kind === 'rain') {
+    // Дождь стрел: круг и падающие стрелы.
+    view.groundEllipse(e.x, e.z, e.r, e.r, `rgba(255,230,160,${0.12 * fade})`, `rgba(255,230,160,${0.8 * fade})`, 0.05);
+    ctx.strokeStyle = `rgba(245,232,190,${fade})`;
+    ctx.lineWidth = Math.max(1.5, view.s * 0.04);
+    for (let i = 0; i < 16; i++) {
+      const a = i * 2.39996, r = e.r * Math.sqrt((i + 0.5) / 16);
+      const fall = (now * 2.2 + i * 0.37) % 1, y = (1 - fall) * 7;
+      const [px, py] = view.project(e.x + Math.sin(a) * r, e.z + Math.cos(a) * r, y);
+      ctx.beginPath(); ctx.moveTo(px, py - view.s * 0.5); ctx.lineTo(px, py); ctx.stroke();
+    }
+  } else if (e.kind === 'dust') {
     // Пыль Яги закрывает подсказки атак.
     for (let i = 0; i < 9; i++) {
       const a = i * 2.39996 + now * 0.2, r = e.r * Math.sqrt((i + 0.5) / 9) * 0.85;
