@@ -165,7 +165,7 @@ export class Hud {
     if (me && !onMap) {
       $('me-name').textContent = `Богатырь ${me.slot + 1}`;
       $('me-name').style.color = ['#ff8a7a', '#8ab0ff'][me.slot] ?? '#fff';
-      $('me-weapon').textContent = me.dropped ? 'оружие выпало!' : WEAPONS[me.weapon].name;
+      $('me-weapon').textContent = me.dropped ? 'оружие выпало!' : WEAPONS[me.weapon]?.name ?? 'без оружия';
       $('me-hp').style.width = `${Math.max(0, me.hp / PLAYER.maxHealth) * 100}%`;
       const cards = $('cards').children;
       for (let i = 0; i < CARDS.max; i++) {

@@ -69,7 +69,7 @@ export class Game {
     const spawn = this.state === SESSION.MAP ? [0, 0] : this.sceneData.spawns[slot];
     const player = {
       id: this.nextId++, slot, socket, x: spawn[0], z: spawn[1], fx: 0, fz: 1,
-      hp: PLAYER.maxHealth, downed: false, weapon: 0, cards: 0, dropped: null, cursed: false,
+      hp: PLAYER.maxHealth, downed: false, weapon: null, cards: 0, dropped: null, cursed: false,
       ability: null, abilityReadyAt: 0, magic: null, magicReadyAt: 0, charm: null, beltUsed: false,
       anim: {}, lastState: this.clock.now,
     };
@@ -558,11 +558,12 @@ export class Game {
     this.tasks.stopAll();
     this.broadcast({ t: 'scene', ...this.sessionInfo() });
 
-    // Все встают на свои места живыми, с оружием в руках, без проклятия и без накопленных карт.
+    // Все встают на свои места живыми, без проклятия и без накопленных карт. В избушке — с пустыми руками: оружие на стойках.
     this.players.forEach((p) => {
       p.downed = false;
       p.hp = PLAYER.maxHealth;
       p.cards = 0;
+      if (state === SESSION.TAVERN) p.weapon = null;
       p.dropped = null;
       p.cursed = false;
       p.slipperyUntil = 0;
@@ -700,6 +701,7 @@ export class Game {
   /** Выстрел богатыря: снаряды летят на сервере и ранят босса. */
   firePlayer(player, m) {
     const weapon = WEAPONS[player.weapon];
+    if (!weapon) return;
     const step = attackStep(weapon, m.kind, m.step);
     if (!step?.projectile) return;
     const count = Math.max(1, step.count);

@@ -176,6 +176,8 @@ export class LocalPlayer {
   updateCombat(dt) {
     const input = this.game.input, me = this.me;
 
+    // С пустыми руками (в избушке, пока не взял со стойки) не бьём.
+    if (me.weapon === null) { this.cancelAttack(); return; }
     // Без оружия не бьём — подходим к нему, и оно само поднимается.
     if (me.dropped) {
       this.cancelAttack();
