@@ -15,7 +15,7 @@ const P = {
   dustStart: 1.2, dustGrow: 1.5, dustSpeed: 3.5, dustLife: 4,
   hutSpeed: 4, hutRunSpeed: 13, hutRadius: 2.6, stompRadius: 2.4, stompDamage: 18, runDamage: 20, peckDamage: 12, peckRange: 4.5,
   /** Здоровье избушки: кончилось — падает, потом встаёт заново с полным. */
-  hutHealth: 300, fallWindow: 3, hutGuard: 2,
+  hutHealth: 300, fallWindow: 6, hutGuard: 2,
   riderSpeed: 13, riderDamage: 14, wingOffset: 2.1, wingRadius: 0.95, wingDamage: 12, fireDamage: 8, fireRadius: 1.6, darkTime: 4, darkLead: 1,
   shovelSpeed: 12, shovelDamage: 30, struggle: 6,
   fireLife: 4, stoveFireDamage: 10,
@@ -553,10 +553,12 @@ export class Yaga {
     this.onRoof = false;
     this.health.invulnerable = true;
     this.game.announce('Избушка устала, Яга у печи!');
-    const end = this.now + 2;
-    while (this.now < end && !this.dead) {
+    // Идёт до самого своего места, откуда бы ни шла: иначе сядет посреди поляны и заслонит Ягу у печи.
+    while (!this.dead) {
       const dx = home.x - hut.x, dz = home.z - hut.z, d = Math.hypot(dx, dz);
-      if (d > 0.1) { hut.x += dx / d * Math.min(d, 6 * this.dt); hut.z += dz / d * Math.min(d, 6 * this.dt); }
+      if (d <= 0.1) break;
+      hut.x += dx / d * Math.min(d, 9 * this.dt);
+      hut.z += dz / d * Math.min(d, 9 * this.dt);
       yield;
     }
     hut.moving = false;
