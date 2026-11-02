@@ -260,7 +260,7 @@ export class Hud {
     const move = ['up', 'left', 'down', 'right'].map(k).join('');
     $('hint').textContent = onMap
       ? (game.session.stoneOpen ? `1 / 2 — выбрать сложность     ${k('back')} — отойти` : `${move} — бежать избушкой     ${k('interact')} — в бой у логова     ${k('back')} — отойти от карты`)
-      : `${k('light')}/${k('heavy')} — атаки   ${k('card')}+${k('light')} — удар за карту   ${k('card')}+${k('heavy')} — ультимейт   ${k('dash')} — перекат   ${k('parry')} — парирование   ${k('ability')} — способность   ${k('magic')} — магия   ${k('interact')} — действие   ${k('help')} — управление   ${k('debug')} — отладка`;
+      : `${k('light')}/${k('heavy')} — атаки   ${k('card')} + атака — карта и ультимейт   ${k('dash')} — перекат   ${k('parry')} — парирование   ${k('ability')}/${k('magic')} — способность и магия   ${k('interact')} — действие   ${k('help')} — управление`;
   }
 
   updateMap(onMap) {
