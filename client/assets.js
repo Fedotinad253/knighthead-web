@@ -61,6 +61,11 @@ export const SOUNDS = {
   shot: { freq: 900, to: 300, duration: 0.08, type: 'triangle', volume: 0.06 },
   dash: { freq: 500, to: 180, duration: 0.12, type: 'sine', volume: 0.05, noise: 0.05 },
   hurt: { freq: 140, to: 60, duration: 0.2, type: 'square', volume: 0.08, noise: 0.08 },
+  hit: { freq: 210, to: 70, duration: 0.09, type: 'square', volume: 0.07, noise: 0.11 },
+  hitBig: { freq: 130, to: 38, duration: 0.24, type: 'square', volume: 0.12, noise: 0.2 },
+  ult: { freq: 90, to: 520, duration: 0.4, type: 'sawtooth', volume: 0.07, noise: 0.05 },
+  ready: { freq: 520, to: 1040, duration: 0.22, type: 'triangle', volume: 0.08 },
+  kill: { freq: 240, to: 30, duration: 0.9, type: 'sawtooth', volume: 0.12, noise: 0.22 },
 };
 
 function context() {

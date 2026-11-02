@@ -1,11 +1,11 @@
 // KnightHead в браузере: игровой цикл, сцены. Логика боя (shared/sim) присылает снимки состояния
 // 30 раз в секунду; босс плавно догоняет их (с небольшой задержкой), снаряды летят по своей скорости.
 // Сейчас игра одиночная — логика идёт прямо в странице (LocalWorld); сетевой кооп вернём позже (connect).
-import { SESSION, BOSSES } from '../shared/data.js';
+import { SESSION, BOSSES, CARDS } from '../shared/data.js';
 import { SCENES } from '../shared/scenes.js';
 import { View, SIN, smoothDamp } from './view.js';
 import { Input } from './input.js';
-import { assets, ALL_IMAGES, loadSound, unlockAudio, playSound } from './assets.js';
+import { assets, ALL_IMAGES, loadSound, unlockAudio, playSound, blip } from './assets.js';
 import { createBogatyr, BogatyrAnimator, createLikho, LikhoAnimator } from './rig.js';
 import { LocalPlayer } from './player.js';
 import { Vfx } from './vfx.js';
@@ -94,7 +94,12 @@ class Game {
         if (this.snaps.length > 30) this.snaps.shift();
         this.session = { ...this.session, ...m.session };
         const me = this.me;
-        if (me && me.cards !== this.lastCards) { this.lastCards = me.cards; this.local.onCardsChanged(); }
+        if (me && me.cards !== this.lastCards) {
+          // Набрались все карты — звук и вспышка у богатыря.
+          if (me.cards >= CARDS.max - 1e-3 && this.lastCards < CARDS.max - 1e-3) { blip('ready'); this.vfx.parryFlash(this.local.x, this.local.z); }
+          this.lastCards = me.cards;
+          this.local.onCardsChanged();
+        }
         break;
       }
       case 'teleport': this.local.teleport(m.x, m.z, m.fx, m.fz); this.view.snap(m.x, m.z); break;
@@ -105,8 +110,7 @@ class Game {
       case 'trapSnap': this.vfx.trapSnap(m.x, m.z, m.variant); break;
       case 'text': this.vfx.text(m.x, m.z, m.y, m.text, m.color, m.duration); break;
       case 'damage':
-        this.vfx.damage(m.x, m.z, m.amount);
-        if (this.boss) this.boss.flashUntil = this.now + 0.08;
+        this.onDamage(m);
         break;
       case 'tele': this.vfx.telegraph(m); break;
       case 'teleCancel': this.vfx.items = this.vfx.items.filter((i) => !(i.kind === 'tele' && i.id === m.id)); break;
@@ -117,7 +121,17 @@ class Game {
         }
         break;
       case 'parryFlash': this.vfx.parryFlash(m.x, m.z); playSound('parry', 0.6); break;
-      case 'hurtFlash': { const a = this.avatars.get(m.id); if (a) a.flashUntil = this.now + 0.12; break; }
+      case 'hurtFlash': {
+        const a = this.avatars.get(m.id);
+        if (a) a.flashUntil = this.now + 0.12;
+        // Свой богатырь ранен: короткий стоп-кадр, красный край экрана, серия ударов сгорает.
+        if (m.id === this.myId) {
+          this.hitStop(0.05);
+          this.hurtUntil = this.realNow + 0.35;
+          this.local.hits = 0;
+        }
+        break;
+      }
       case 'fx': if (m.fx === 'slash') this.vfx.slash(m.x, m.z, m.dx, m.dz, m.range, m.arc, m.color); break;
       case 'drag': this.local.x = m.x; this.local.z = m.z; break;
       case 'abilityFx':
@@ -132,7 +146,16 @@ class Game {
         else if (m.kind === 'water') this.vfx.ring(m.x, m.z, 1.1, 0.5, '120,230,150');
         else if (m.kind === 'turn') this.vfx.ring(m.x, m.z, 1.4, 0.5, '255,217,102');
         break;
-      case 'result': this.hud.showResult(m); break;
+      case 'result':
+        // Таблица появляется чуть позже, чтобы не закрыть собой сам момент победы.
+        this.pendingResult = m;
+        this.pendingResultAt = this.realNow + 0.9;
+        // Босс пал: всё замедляется, вспышка и тряска.
+        this.slowMotion(1.4, 0.25);
+        this.flashScreen('255,245,220', 0.75, 0.5);
+        this.view.shake(0.8, 0.8, this.now);
+        blip('kill');
+        break;
     }
   }
 
@@ -190,8 +213,41 @@ class Game {
 
   // ---------------------------------------------------------------- Кадр
 
-  frame(dt) {
+  /** Стоп-кадр: время почти останавливается на seconds настоящих секунд. */
+  hitStop(seconds) { this.stopLeft = Math.max(this.stopLeft ?? 0, seconds); }
+  /** Замедление времени. */
+  slowMotion(seconds, scale) { this.slowLeft = seconds; this.slowScale = scale; }
+  /** Вспышка на весь экран, плавно гаснет. */
+  flashScreen(rgb, alpha, seconds) { this.screenFlash = { rgb, alpha, until: this.realNow + seconds, seconds }; }
+
+  /** Попали по врагу: цифра, искры, звук, отдача, тряска, в ближнем бою — стоп-кадр. */
+  onDamage(m) {
+    this.vfx.damage(m.x, m.z, m.amount, m.dot);
+    if (this.boss) this.boss.flashUntil = this.now + 0.08;
+    if (m.dot) return;
+    const big = m.amount >= 60, melee = this.now - (this.local.lastStrikeAt ?? -9) < 0.06;
+    this.vfx.sparks(m.x, m.z, Math.min(22, 5 + Math.round(m.amount / 6)), m.wood);
+    if (big) this.vfx.shock(m.x, m.z, 1 + m.amount / 90);
+    if (this.realNow - (this.lastHitSound ?? -9) > 0.04) { blip(big ? 'hitBig' : 'hit'); this.lastHitSound = this.realNow; }
+    this.view.shake(Math.min(0.5, 0.05 + m.amount / 350), big ? 0.22 : 0.1, this.now);
+    if (melee) this.hitStop(Math.min(0.12, 0.03 + m.amount / 1400));
+    // Босс вздрагивает от удара в сторону от богатыря.
+    if (this.boss && !m.wood) {
+      const dx = this.boss.x - this.local.x, dz = this.boss.z - this.local.z, l = Math.hypot(dx, dz) || 1, push = Math.min(0.5, 0.1 + m.amount / 300);
+      this.boss.kick = { x: dx / l * push, z: dz / l * push, until: this.now + 0.13 };
+    }
+    this.local.hits = (this.local.hits ?? 0) + 1;
+    this.local.hitsUntil = this.realNow + 3;
+    this.local.hitPulse = this.realNow;
+  }
+
+  frame(realDt) {
+    this.realNow = (this.realNow ?? 0) + realDt;
+    let dt = realDt;
+    if (this.stopLeft > 0) { this.stopLeft -= realDt; dt = realDt * 0.04; }
+    else if (this.slowLeft > 0) { this.slowLeft -= realDt; dt = realDt * this.slowScale; }
     this.now += dt;
+    if (this.pendingResult && this.realNow >= this.pendingResultAt) { this.hud.showResult(this.pendingResult); this.pendingResult = null; }
     this.world?.update(dt);
     const onMap = this.session?.state === SESSION.MAP;
     this.hud.update();
@@ -308,6 +364,12 @@ class Game {
     Object.assign(boss, bs, { x: lerp(ba.x, bb.x, k), z: lerp(ba.z, bb.z, k), fx: bb.fx, fz: bb.fz, pose: bb.pose ?? bs.pose,
       radius: bs.kind === 'likho' ? 0.55 : 0.7 });
     if (boss.fx > 0.15) boss.flip = false; else if (boss.fx < -0.15) boss.flip = true;
+    // Вздрагивает от удара.
+    if (boss.kick && this.now < boss.kick.until) {
+      const k2 = (boss.kick.until - this.now) / 0.13;
+      boss.x += boss.kick.x * k2; boss.z += boss.kick.z * k2;
+      boss.squash = 1 - 0.1 * k2;
+    } else boss.squash = 1;
     if (boss.animator) {
       const speed = dt > 0 && Math.hypot(boss.x - ox, boss.z - oz) < 3 ? Math.hypot(boss.x - ox, boss.z - oz) / dt : 0;
       boss.animator.update(dt, boss.pose, boss.eyeBlind, speed, this.now);

@@ -41,14 +41,29 @@ export class Vfx {
   trapThrow(m) { this.add({ kind: 'trapFly', ...m, until: this.now + m.duration }); }
   /** Капкан захлопнулся: закрытый лежит ещё немного. */
   trapSnap(x, z, variant) { this.add({ kind: 'trapClosed', x, z, variant, until: this.now + 1.4 }); }
-  slash(x, z, dx, dz, range, arc, color) { this.add({ kind: 'slash', x, z, dx, dz, range, arc, color, until: this.now + 0.15 }); }
+  slash(x, z, dx, dz, range, arc, color) { this.add({ kind: 'slash', x, z, dx, dz, range, arc, color, until: this.now + 0.22 }); }
+  /** Искры от попадания (или щепки от избушки): разлетаются и падают. */
+  sparks(x, z, count, wood = false) {
+    const parts = Array.from({ length: count }, () => {
+      const a = Math.random() * Math.PI * 2, speed = 2 + Math.random() * 6;
+      return { vx: Math.cos(a) * speed, vy: Math.abs(Math.sin(a)) * speed + 1.5, life: 0.5 + Math.random() * 0.5 };
+    });
+    this.add({ kind: 'sparks', x, z, parts, wood, until: this.now + 1 });
+  }
+  /** Кольцо-волна от сильного удара. */
+  shock(x, z, r) { this.add({ kind: 'shock', x, z, r, until: this.now + 0.3 }); }
   parryFlash(x, z) { this.add({ kind: 'parry', x, z, until: this.now + 0.35 }); }
   text(x, z, y, text, color = '#fff', duration = 1.2) { this.add({ kind: 'text', x, z, y, text, color, until: this.now + duration, duration }); }
   /** Кольцо на земле, сжимающееся к центру (rgb — «r,g,b»): прицел искры, морок, живая вода. */
   ring(x, z, r, duration, rgb) { this.add({ kind: 'ring', x, z, r, rgb, until: this.now + Math.max(0.2, duration) }); }
   /** Брошенная бытовая магия: летит дугой из (x, z) в (tx, tz). */
   toss(kind, x, z, tx, tz, flight = 0.35) { this.add({ kind: 'toss', what: kind, x, z, tx, tz, until: this.now + flight }); }
-  damage(x, z, amount) { this.add({ kind: 'text', x: x + (Math.random() - 0.5) * 0.8, z, y: 2.4, text: String(amount), color: '#fff', until: this.now + 0.8, duration: 0.8, small: true }); }
+  /** Цифра урона: чем больше, тем крупнее и горячее. Кровотечение и огонь — маленькие и красные. */
+  damage(x, z, amount, dot = false) {
+    const color = dot ? '#ff7a5a' : amount >= 90 ? '#ff9a3c' : amount >= 40 ? '#ffd966' : '#fff';
+    const size = dot ? 0.3 : 0.4 + Math.min(0.55, amount / 220);
+    this.add({ kind: 'text', x: x + (Math.random() - 0.5) * 1.2, z, y: 2.4 + Math.random() * 0.5, text: String(amount), color, size, pop: !dot, until: this.now + 0.8, duration: 0.8 });
+  }
 
   /** Всё, что лежит на земле, — под персонажами. */
   drawGround(view) {
@@ -106,6 +121,23 @@ export class Vfx {
         // Сук падает с высоты в свою тень.
         const [px, py] = view.project(i.x, i.z, (1 - t * t) * 10 + 0.4);
         drawCentered(view, BRANCHES[(i.id ?? 0) % BRANCHES.length], px, py, 2.6, (1 - t) * 0.8);
+      } else if (i.kind === 'sparks') {
+        const age = this.now - i.born;
+        ctx.lineWidth = Math.max(1.5, view.s * 0.045);
+        for (const q of i.parts) {
+          if (age >= q.life) continue;
+          const y = 1.4 + q.vy * age - 9 * age * age;
+          if (y < 0) continue;
+          const [px, py] = view.project(i.x + q.vx * age, i.z, y);
+          const [ox, oy] = view.project(i.x + q.vx * (age - 0.025), i.z, 1.4 + q.vy * (age - 0.025) - 9 * (age - 0.025) * (age - 0.025));
+          ctx.strokeStyle = i.wood ? '#a97c4a' : age < q.life * 0.5 ? '#fff0b0' : '#ff9a3c';
+          ctx.globalAlpha = 1 - age / q.life;
+          ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(px, py); ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+      } else if (i.kind === 'shock') {
+        const r = i.r * (0.3 + t * 0.9);
+        view.groundEllipse(i.x, i.z, r, r, null, `rgba(255,240,200,${0.8 * (1 - t)})`, 0.12 * (1 - t) + 0.02);
       } else if (i.kind === 'trapFly') {
         const style = TRAP_FLIGHT[i.variant] ?? TRAP_FLIGHT.a;
         const x = i.x0 + (i.x - i.x0) * t, z = i.z0 + (i.z - i.z0) * t;
@@ -120,7 +152,9 @@ export class Vfx {
         ctx.lineWidth = Math.max(1, view.s * 0.03);
         ctx.beginPath(); ctx.arc(px, py, view.s * 0.16, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       } else if (i.kind === 'text') {
-        view.label(i.x, i.z, i.y + t * 0.8, i.text, i.color, i.small ? 0.36 : 0.5, 1 - Math.max(0, t - 0.6) / 0.4);
+        // Цифра сначала «выстреливает» крупно, потом садится.
+        const size = (i.size ?? 0.5) * (i.pop ? 1 + 0.7 * Math.max(0, 1 - t / 0.18) : 1);
+        view.label(i.x, i.z, i.y + t * 0.8, i.text, i.color, size, 1 - Math.max(0, t - 0.6) / 0.4);
       }
     }
   }
@@ -153,16 +187,25 @@ function drawArc(view, i, t) {
   const [px, py] = view.project(i.x, i.z);
   const angle = Math.atan2(-i.dz * SIN, i.dx);
   const half = Math.min(Math.PI, i.arc * Math.PI / 360);
+  // След оружия: полумесяц, который пробегает дугу и тает. Внешний край ярче внутреннего.
+  const sweep = 1 - (1 - Math.min(1, t * 2.2)) ** 3;
+  const from = -half, to = -half + half * 2 * sweep, outer = i.range * s, inner = outer * (0.72 + 0.22 * t);
   ctx.save();
   ctx.translate(px, py);
   ctx.scale(1, SIN);
   ctx.rotate(Math.atan2(-i.dz, i.dx));
   ctx.beginPath();
-  ctx.moveTo(0, 0);
-  ctx.arc(0, 0, i.range * s, -half, half);
+  ctx.arc(0, 0, outer, from, to);
+  ctx.arc(0, 0, inner, to, from, true);
   ctx.closePath();
-  ctx.globalAlpha = 1 - t;
+  const g = ctx.createRadialGradient(0, 0, inner, 0, 0, outer);
+  g.addColorStop(0, 'rgba(255,255,255,0)');
+  g.addColorStop(1, 'rgba(255,255,255,1)');
+  ctx.globalAlpha = (1 - t) * 0.8;
   ctx.fillStyle = i.color;
+  ctx.fill();
+  ctx.globalAlpha = (1 - t) * 0.45;
+  ctx.fillStyle = g;
   ctx.fill();
   ctx.restore();
   void angle;

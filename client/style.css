@@ -39,7 +39,9 @@ canvas#game { position: fixed; inset: 0; width: 100vw; height: 100vh; display: b
 #boss-marks { position: absolute; inset: 0; pointer-events: none; }
 .boss-mark { position: absolute; top: -3px; bottom: -3px; width: 3px; margin-left: -1.5px; background: #f3ead8; box-shadow: 0 0 4px #000; border-radius: 1px; }
 .boss-mark.passed { background: rgba(243, 234, 216, 0.35); }
-#boss-hp { background: linear-gradient(#c43c3c, #7a1e1e); }
+#boss-hp { position: relative; background: linear-gradient(#c43c3c, #7a1e1e); }
+#boss-chip { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; background: #f3ead8; }
+#hits { position: fixed; right: 40px; top: 34%; font-size: 44px; font-weight: 800; font-style: italic; color: var(--gold); text-shadow: 0 3px 10px #000; pointer-events: none; transform-origin: right center; }
 #boss-phase { opacity: 0.8; text-shadow: 0 1px 3px #000; }
 
 #worlds { position: fixed; left: 18px; top: 18px; line-height: 1.6; font-weight: 600; }

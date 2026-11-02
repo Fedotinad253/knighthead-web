@@ -207,6 +207,13 @@ export class Hud {
       $('boss-name').textContent = boss.name;
       const fraction = Math.max(0, boss.hp / boss.max);
       $('boss-hp').style.width = `${fraction * 100}%`;
+      // Белая полоса отстаёт от здоровья и догоняет: видно, сколько снёс удар.
+      if (boss.chip === undefined || fraction > boss.chip) { boss.chip = fraction; boss.chipHoldUntil = 0; }
+      if (fraction < boss.chip) {
+        boss.chipHoldUntil ||= now + 0.45;
+        if (now >= boss.chipHoldUntil) boss.chip = Math.max(fraction, boss.chip - 0.008);
+      } else boss.chipHoldUntil = 0;
+      $('boss-chip').style.width = `${boss.chip * 100}%`;
       // Деления полосы — границы фаз; пройденные тускнеют.
       const marks = boss.phaseMarks ?? [];
       const key = `${boss.kind}:${marks.join(',')}`;
@@ -234,6 +241,15 @@ export class Hud {
       const curses = (session?.curses ?? []).map((c) => CURSES[c]?.name).filter(Boolean);
       $('boss-curses').textContent = curses.length ? `Проклятия: ${curses.join(', ')}` : '';
     }
+
+    // Серия попаданий: сгорает через 3 секунды без ударов или от полученного урона.
+    const local = game.local, real = game.realNow ?? 0, hits = local.hits ?? 0;
+    const showHits = hits >= 2 && real < (local.hitsUntil ?? 0) && !onMap;
+    $('hits').hidden = !showHits;
+    if (showHits) {
+      $('hits').textContent = `${hits} ×`;
+      $('hits').style.transform = `scale(${1 + 0.5 * Math.max(0, 1 - (real - local.hitPulse) / 0.14)})`;
+    } else if (real >= (local.hitsUntil ?? 0)) local.hits = 0;
 
     this.updatePrompt(onMap);
     this.updateMap(onMap);

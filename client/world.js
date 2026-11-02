@@ -102,7 +102,26 @@ export function drawWorld(game) {
   if (game.boss?.kind === 'dummy') view.label(game.boss.x, game.boss.z, 3.4, game.boss.name, '#ffe9a8', 0.4);
   drawBossStatus(game);
   game.vfx.drawTop(view);
+  drawScreenEffects(game);
   if (game.showHitboxes) drawHitboxes(game);
+}
+
+/** Вспышка на весь экран и красный край, когда богатырь ранен. */
+function drawScreenEffects(game) {
+  const { view } = game, ctx = view.ctx, now = game.realNow ?? 0;
+  const flash = game.screenFlash;
+  if (flash && now < flash.until) {
+    ctx.fillStyle = `rgba(${flash.rgb},${flash.alpha * (flash.until - now) / flash.seconds})`;
+    ctx.fillRect(0, 0, view.w, view.h);
+  }
+  if (now < (game.hurtUntil ?? 0)) {
+    const k = (game.hurtUntil - now) / 0.35;
+    const g = ctx.createRadialGradient(view.w / 2, view.h / 2, view.h * 0.35, view.w / 2, view.h / 2, view.h * 0.8);
+    g.addColorStop(0, 'rgba(190,20,20,0)');
+    g.addColorStop(1, `rgba(190,20,20,${0.6 * k})`);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, view.w, view.h);
+  }
 }
 
 /** Что видно на боссе: оглушение — звёзды, огонь — пламя, кровотечение — капли. */
@@ -378,7 +397,7 @@ function drawBoss(game, b) {
   if (b.kind === 'likho') {
     const hiddenInBush = b.pose === 'Hidden';
     if (!hiddenInBush) view.groundEllipse(b.x, b.z, 0.9, 0.7, 'rgba(0,0,0,0.35)');
-    const base = b.rig.base(view, b.x, b.z, { flip: b.flip });
+    const base = b.rig.base(view, b.x, b.z, { flip: b.flip, squash: b.squash ?? 1 });
     b.rig.draw(ctx, base, { overlay: flash ? '#ffffff' : null, overlayAlpha: flash ? 0.6 : 0 });
     if (b.pose === 'Stunned') drawStars(view, b.x, b.z, 3.2, game.now);
     // Горящий глаз светит в ночном лесу.

@@ -175,6 +175,7 @@ export class LocalPlayer {
     this.rollStart = this.now;
     this.rollEnd = this.now + P.rollDuration;
     this.nextRoll = this.rollEnd + P.rollCooldown;
+    this.game.vfx.flash(this.x, this.z, 0.7, 'dust');
     blip('dash');
   }
 
@@ -265,6 +266,9 @@ export class LocalPlayer {
         const name = kind === ATTACK.CARD ? weapon.cardName : weapon.ultimateName;
         this.game.vfx.text(this.x, this.z, 2.9, name, kind === ATTACK.ULTIMATE ? '#ff9a3c' : '#ffd966', 1.4);
         if (kind === ATTACK.ULTIMATE) {
+          this.game.flashScreen('255,200,90', 0.45, 0.35);
+          this.game.slowMotion(0.25, 0.35);
+          blip('ult');
           // В ультимейт богатырь неуязвим и его нельзя прервать.
           this.invulnerableUntil = this.now + weapon.ultimate.reduce((sum, step) => sum + stepDuration(step), 0);
           this.game.view.shake(0.3, 0.3, this.now);
@@ -332,7 +336,9 @@ export class LocalPlayer {
       return;
     }
 
-    const color = card ? 'rgba(255,204,51,0.6)' : 'rgba(255,255,255,0.35)';
+    // Приёмы ярче обычных ударов.
+    const color = card ? 'rgba(255,204,51,0.75)' : a.kind === ATTACK.FINISHER ? 'rgba(255,235,170,0.6)' : 'rgba(255,255,255,0.4)';
+    this.lastStrikeAt = this.now;
     game.vfx.slash(this.x, this.z, this.aimX, this.aimZ, step.range, step.arc, color);
     game.send({ t: 'fx', fx: 'slash', x: r2(this.x), z: r2(this.z), dx: this.aimX, dz: this.aimZ, range: step.range, arc: step.arc, color });
     blip('slash');
@@ -415,6 +421,10 @@ export class LocalPlayer {
         this.processed.set(h.key, this.now);
         this.invulnerableUntil = this.now + P.parryInvulnerability;
         game.vfx.parryFlash(this.x, this.z);
+        game.vfx.sparks(this.x, this.z, 16);
+        // Парирование — главный момент: заметный стоп-кадр и тряска.
+        game.hitStop(0.13);
+        game.view.shake(0.28, 0.2, this.now);
         playSound('parry');
         game.vfx.text(this.x, this.z, 2.5, 'ПАРИРОВАНО!', '#ff59c7', 1.3);
         game.removeHazardLocally(h.id);

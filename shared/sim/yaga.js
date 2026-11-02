@@ -506,7 +506,7 @@ export class Yaga {
     if (!hut.active || hut.fallen || hut.seated || this.dead || !this.onRoof || this.now < hut.guardUntil) return 0;
     const dealt = Math.min(hut.hp, amount);
     hut.hp -= dealt;
-    this.game.showDamage(hut.x, hut.z, dealt);
+    this.game.showDamage(hut.x, hut.z, dealt, true);
     if (hut.hp <= 0) this.interrupt(this.hutFall());
     return dealt;
   }
@@ -771,10 +771,10 @@ export class Yaga {
       this.game.teleport(this.finisher, x, z, 0, 1);
       this.game.floatText(x, z, 3, '«Избушка, избушка, повернись ко мне передом!»', '#ffd966', 3);
     }
-    yield* this.wait(1.5);
+    yield* this.wait(1.2);
     this.hut.seated = false;
     this.game.shake(0.5, 1);
-    yield* this.wait(1.5);
+    yield* this.wait(1);
     this.health.invulnerable = false;
     this.health.floor = 0;
     this.health.hp = 0;
@@ -798,6 +798,6 @@ export class Yaga {
     this.pose = 'Dead';
     this.game.recordVictory();
     this.game.announce('Избушка теперь твоя!');
-    this.tasks.start((function* (self) { yield 3; self.game.bossDefeated(); })(this));
+    this.tasks.start((function* (self) { yield 0.5; self.game.bossDefeated(); })(this));
   }
 }

@@ -625,7 +625,7 @@ export class Likho {
     // Победа засчитывается сразу, а не после «последнего вздоха» — вдруг богатырь тут же сбежит.
     this.game.recordVictory();
     this.game.announce('Лихо испускает последний вздох…');
-    this.tasks.start((function* (self) { yield 3; self.game.bossDefeated(); })(this));
+    this.tasks.start((function* (self) { yield 0.5; self.game.bossDefeated(); })(this));
   }
 
   // ---------------------------------------------------------------- Движение и выбор цели

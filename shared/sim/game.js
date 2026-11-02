@@ -341,7 +341,9 @@ export class Game {
       if (now >= (status[until] ?? 0)) { status[next] = undefined; return; }
       if (now < status[next]) return;
       status[next] = now + config.tick;
+      this.dotTicking = true;
       if (boss.onRoof) boss.hitHut(damage); else boss.applyDamage(damage);
+      this.dotTicking = false;
     };
     tick('bleedUntil', 'bleedNext', STATUS.bleed, STATUS.bleed.damage * (status.bleedStacks ?? 1));
     tick('burnUntil', 'burnNext', STATUS.burn, STATUS.burn.damage);
@@ -688,7 +690,7 @@ export class Game {
       ? `Победа! Открыт путь в ${next.name}` : `Победа над «${BOSSES[boss].name}»!`;
   }
 
-  /** Бой окончен победой: объявление и через 4 секунды — к карте. */
+  /** Бой окончен победой: объявление и сразу к карте, задерживать игрока незачем. */
   bossDefeated() {
     if (this.state !== SESSION.ARENA || this.fightResolved) return;
     this.fightResolved = true;
@@ -696,7 +698,7 @@ export class Game {
     this.announce(this.victory);
     // Первая победа над Ягой: избушка теперь твоя, заходим внутрь.
     const home = this.firstYaga ? SESSION.TAVERN : SESSION.MAP;
-    this.tasks.start((function* (game) { yield 4; game.goTo(home); })(this));
+    this.tasks.start((function* (game) { yield 0.4; game.goTo(home); })(this));
   }
 
   // ---------------------------------------------------------------- Действия для боссов
@@ -705,7 +707,10 @@ export class Game {
   shake(amount, duration) { this.broadcast({ t: 'shake', amount, duration }); }
   flash(x, z, r, look = null) { this.broadcast({ t: 'flash', x, z, r, look }); }
   floatText(x, z, y, text, color, duration = 1.2) { this.broadcast({ t: 'text', x, z, y, text, color, duration }); }
-  showDamage(x, z, amount) { this.broadcast({ t: 'damage', x, z, amount: Math.round(amount) }); }
+  /** Показать урон. dot — это кровотечение или огонь (без стоп-кадра), wood — удар по избушке (летят щепки). */
+  showDamage(x, z, amount, wood = false) {
+    this.broadcast({ t: 'damage', x, z, amount: Math.round(amount), dot: !!this.dotTicking, wood });
+  }
   /** Подсказки атак (красные круги и полосы). Возвращают номер — чтобы убрать подсказку, если атака отменилась. */
   telegraphCircle(x, z, r, duration, color) {
     const id = this.nextId++;
