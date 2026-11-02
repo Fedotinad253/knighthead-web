@@ -120,6 +120,7 @@ class Game {
       case 'hurtFlash': { const a = this.avatars.get(m.id); if (a) a.flashUntil = this.now + 0.12; break; }
       case 'fx': if (m.fx === 'slash') this.vfx.slash(m.x, m.z, m.dx, m.dz, m.range, m.arc, m.color); break;
       case 'drag': this.local.x = m.x; this.local.z = m.z; break;
+      case 'sniff': this.vfx.sniff(m.duration, m.moved); break;
       case 'abilityFx':
         if (m.kind === 'rope') this.vfx.slash(m.x, m.z, m.tx - m.x, m.tz - m.z, Math.hypot(m.tx - m.x, m.tz - m.z), 8, 'rgba(210,190,140,0.8)');
         else if (m.kind === 'sickle') this.vfx.slash(m.x, m.z, m.tx - m.x, m.tz - m.z, Math.hypot(m.tx - m.x, m.tz - m.z) + 1, 120, 'rgba(220,235,200,0.7)');

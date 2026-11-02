@@ -127,7 +127,6 @@ export function drawHut(game, hut) {
     drawStanding(view, hut.turned ? 'yaga/hut_back.png' : 'yaga/hut_front.png', x, z - 1, 4.6, false, LEG_HEIGHT);
   }
   ctx.restore();
-  if (hut.active && hut.legHits > 0 && !hut.fallen) view.label(x, z, 2.4, `Ноги: ${Math.floor(hut.legHits)}/3`, '#ffd94d', 0.45);
 }
 
 /** Яга в ступе: из рисунков. В полёте покачивается, на крыше сидит над избушкой, сбитая лежит. */

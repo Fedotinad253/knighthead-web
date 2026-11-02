@@ -7,7 +7,7 @@ import { getVolume, setVolume, unlockAudio, blip } from './assets.js';
 
 const $ = (id) => document.getElementById(id);
 const iconUrl = (path) => new URL(`../assets/${path}`, import.meta.url).href;
-const PHASES = { likho: ['Из кустов', 'Ползучее', 'Слепое бешенство'], yaga: ['Ступа', 'Избушка: бей по ногам', 'Печь'] };
+const PHASES = { likho: ['Из кустов', 'Ползучее', 'Слепое бешенство'], yaga: ['Ступа', 'Избушка', 'Печь'] };
 
 export class Hud {
   constructor(game) {
@@ -213,6 +213,13 @@ export class Hud {
       marks.forEach((m, i) => $('boss-marks').children[i]?.classList.toggle('passed', fraction <= m + 0.001));
       const names = PHASES[boss.kind];
       $('boss-phase').textContent = names ? `Фаза ${boss.phase}: ${names[boss.phase - 1] ?? ''}` : boss.phase > 1 ? 'Злится!' : '';
+      // У избушки своя полоса здоровья.
+      const hut = boss.hut;
+      $('hut-bar').hidden = !hut?.active;
+      if (hut?.active) {
+        $('hut-name').textContent = hut.fallen ? 'Избушка упала: бей Ягу!' : 'Избушка';
+        $('hut-hp').style.width = `${Math.max(0, hut.hp / hut.max) * 100}%`;
+      }
       const curses = (session?.curses ?? []).map((c) => CURSES[c]?.name).filter(Boolean);
       $('boss-curses').textContent = curses.length ? `Проклятия: ${curses.join(', ')}` : '';
     }

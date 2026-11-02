@@ -120,7 +120,12 @@ export class Game {
         this.damageBoss(player, Math.min(m.damage, 200), m.fills);
         break;
       }
-      case 'hitHut': if (!player.downed) this.boss?.hitHut?.(1); break;
+      case 'hitHut': {
+        if (player.downed || !this.boss?.hitHut) break;
+        const dealt = this.boss.hitHut(Math.min(m.damage, 200));
+        if (m.fills) this.addCards(player, dealt / CARDS.damagePerCard);
+        break;
+      }
       case 'struggle': this.struggle(player); break;
       case 'fire': this.firePlayer(player, m); this.boss?.hear?.(player.x, player.z); break;
       case 'spendCard': player.cards = Math.max(0, player.cards - 1); break;
@@ -340,7 +345,7 @@ export class Game {
           if (game.boss.throughCover) game.boss.throughCover(strike); else strike();
         }
         const hut = game.boss.hut;
-        if (hut && Math.hypot(hut.x - x, hut.z - z) < spell.radius + 2.6) game.boss.hitHut?.(1);
+        if (hut && Math.hypot(hut.x - x, hut.z - z) < spell.radius + 2.6) game.boss.hitHut?.(spell.damage);
       })(this));
     } else if (id === 'decoy') {
       this.decoy = { id: 'decoy', x, z, expire: now + spell.duration, downed: false, owner: player.id };
@@ -399,7 +404,9 @@ export class Game {
     const id = player.ability, a = ABILITIES[id], now = this.clock.now;
     if (!a || this.state !== SESSION.ARENA || player.downed || now < player.abilityReadyAt || !this.boss) return;
     if (id === 'rope') {
-      if (!this.boss.onRope?.(player, a.range)) { this.floatText(player.x, player.z, 2.6, 'Некого сдёрнуть', '#cfc4b0', 1); return; }
+      const caught = this.boss.onRope?.(player, a.range);
+      if (caught === null) return; // вывернулась: перезарядка не тратится, надпись уже над ней
+      if (!caught) { this.floatText(player.x, player.z, 2.6, 'Некого сдёрнуть', '#cfc4b0', 1); return; }
       player.abilityReadyAt = now + a.cooldown;
       this.broadcast({ t: 'abilityFx', kind: id, x: player.x, z: player.z, tx: this.boss.x, tz: this.boss.z });
       return;
@@ -737,6 +744,15 @@ export class Game {
     // Горящие угли жгут босса два раза в секунду.
     this.effects = this.effects.filter((e) => now < e.expire);
     for (const e of this.effects) {
+      // В пыли от метлы богатырь кашляет: понемногу теряет здоровье (и замедляется, это считает его браузер).
+      if (e.kind === 'dust' && now >= e.nextTick) {
+        e.nextTick = now + 0.7;
+        for (const p of this.alivePlayers()) {
+          if (Math.hypot(p.x - e.x, p.z - e.z) >= e.r) continue;
+          this.damagePlayer(p, 4);
+          this.floatText(p.x, p.z, 2.6, 'Кха-кха!', '#d9cfa8', 0.7);
+        }
+      }
       if (e.kind !== 'coals' || now < e.nextTick || !this.boss) continue;
       e.nextTick = now + 0.5;
       if (!this.boss.airborne && Math.hypot(this.boss.x - e.x, this.boss.z - e.z) < e.r + (this.boss.radius ?? 0.5))
@@ -749,7 +765,7 @@ export class Game {
       if (!this.boss || p.hitBoss) continue;
       const hut = this.boss.hut;
       if (hut?.active && !hut.fallen && this.boss.onRoof && Math.hypot(p.x - hut.x, p.z - hut.z) < 2.85) {
-        this.boss.hitHut(0.5); // стрела по ноге считается за половину удара
+        this.boss.hitHut(p.damage);
         p.hitBoss = true;
         if (!p.pierce) p.expire = 0;
       } else if (Math.hypot(p.x - this.boss.x, p.z - this.boss.z) < this.boss.radius + 0.25) {

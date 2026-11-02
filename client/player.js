@@ -103,7 +103,9 @@ export class LocalPlayer {
         const l = Math.hypot(this.vx, this.vz);
         if (l > P.speed) { this.vx *= P.speed / l; this.vz *= P.speed / l; }
         const [mx, mz] = input.move;
-        const speed = this.attack ? P.speed * this.weapon.moveWhileAttacking : P.speed;
+        // В пыли от метлы идти тяжело.
+        const dusty = game.latest?.effects?.some((e) => e.kind === 'dust' && Math.hypot(e.x - this.x, e.z - this.z) < e.r);
+        const speed = (this.attack ? P.speed * this.weapon.moveWhileAttacking : P.speed) * (dusty ? 0.55 : 1);
         this.accelerate(mx * speed, mz * speed, dt);
         if (!this.attack) this.setFacing(...this.aim());
       }
@@ -294,7 +296,7 @@ export class LocalPlayer {
     if (!boss || boss.hp <= 0) return;
     // Яга на крыше: бьём по ногам избушки. В воздухе ближним оружием не достать.
     const hut = boss.hut;
-    if (hut?.active && !hut.fallen && boss.onRoof) { if (reaches(hut.x, hut.z, hut.r)) game.send({ t: 'hitHut' }); return; }
+    if (hut?.active && !hut.fallen && boss.onRoof) { if (reaches(hut.x, hut.z, hut.r)) game.send({ t: 'hitHut', damage: step.damage, fills: !card }); return; }
     if (boss.airborne) return;
     if (reaches(boss.x, boss.z, boss.radius ?? 0.55)) game.send({ t: 'hit', damage: step.damage, fills: !card });
   }

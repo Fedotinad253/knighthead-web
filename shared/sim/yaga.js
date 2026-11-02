@@ -1,6 +1,6 @@
 // Баба-Яга — первый босс игры. Победив её, богатырь забирает избушку.
 // Фаза 1 «Ступа»: летает, пикирует и вязнет в земле, кости с забора, пыль от метлы, «русский дух».
-// Фаза 2 «Избушка»: Яга на крыше неуязвима, бьётся избушка. Три удара по ногам — избушка падает, Ягу можно бить.
+// Фаза 2 «Избушка»: Яга на крыше неуязвима, бьётся избушка. У неё своё здоровье: кончилось — падает, Ягу можно бить.
 // Фаза 3 «Печь»: избушка садится, Яга у печи: лопата (тащит в печь), огонь, рывок, гуси-лебеди.
 // Конец: Яга без сил, богатырь говорит заветные слова — сценка, и избушка теперь его.
 import { Tasks } from './tasks.js';
@@ -11,16 +11,18 @@ const P = {
   hoverRadius: 9, hoverSpeed: 8, pause: 0.9,
   diveSpeed: 18, diveDamage: 15, diveTelegraph: 0.8, stuckWindow: 2,
   boneSpeed: 9, boneDamage: 10,
-  dustLife: 3, sniffTime: 1.2, sniffMoved: 1.5, sniffDamage: 15,
+  dustLife: 3, sniffTime: 1.5, sniffMoved: 2.5,
   hutSpeed: 4, hutRunSpeed: 13, hutRadius: 2.6, stompRadius: 2.4, stompDamage: 18, runDamage: 20, peckDamage: 12, peckRange: 4.5,
-  legHits: 3, fallWindow: 4,
+  /** Здоровье избушки: кончилось — падает, потом встаёт заново с полным. */
+  hutHealth: 300, fallWindow: 3, hutGuard: 2,
   riderSpeed: 13, riderDamage: 14, fireDamage: 8, darkTime: 4,
   shovelSpeed: 12, shovelDamage: 30, struggle: 6,
   fireLife: 4, stoveFireDamage: 10,
   dashSpeed: 14, dashDamage: 14, restWindow: 2,
   gooseSpeed: 13, gooseDamage: 8,
   fenceRadius: 14.2, fenceDamage: 8, gateRadius: 3.5, gateDamage: 15, gateEvery: 3.5,
-  knockdown: 3,
+  /** Верёвка: на сколько сбивает и сколько потом на Ягу не действует. */
+  knockdown: 2, stunImmunity: 12,
 };
 
 /** Позы, в которых Яга открыта для ударов (для Медвежьего когтя). */
@@ -58,7 +60,8 @@ export class Yaga {
     this.gateStrikeAt = 0;
 
     const home = this.scene.hutHome;
-    this.hut = { x: home.x, z: home.z, active: false, fallen: false, seated: true, turnedUntil: 0, legHits: 0, moving: false, charging: false, token: 0 };
+    const hutMax = P.hutHealth * difficulty.bossHealth;
+    this.hut = { x: home.x, z: home.z, active: false, fallen: false, seated: true, turnedUntil: 0, hp: hutMax, max: hutMax, guardUntil: 0, moving: false, charging: false, token: 0 };
 
     this.health = new Health(P.health * difficulty.bossHealth);
     this.health.onDepleted = () => this.onDepleted();
@@ -125,7 +128,7 @@ export class Yaga {
       claws: this.claws.active ? { token: this.claws.token, damage: this.claws.damage } : null,
       contact: 0, fenceR: P.fenceRadius, gateBite: this.gateStrikeAt > 0, stoveLit: this.phase === 3,
       hut: { x: r2(h.x), z: r2(h.z), active: h.active, fallen: h.fallen, seated: h.seated, moving: h.moving,
-        turned: h.turnedUntil > this.now, charging: h.charging, token: h.token, legHits: h.legHits, r: P.hutRadius },
+        turned: h.turnedUntil > this.now, charging: h.charging, token: h.token, hp: Math.round(h.hp), max: Math.round(h.max), r: P.hutRadius },
       phaseMarks: [2 / 3, 1 / 3],
     };
   }
@@ -241,34 +244,39 @@ export class Yaga {
     for (let i = 0; i < times && !this.atFloor; i++) {
       const target = this.pickTarget();
       if (!target) return;
-      const [dx, dz] = norm(target.x - this.x, target.z - this.z);
-      const length = Math.min(Math.hypot(target.x - this.x, target.z - this.z) + 2.5, 24);
-      this.face(dx, dz);
-      this.pose = 'Aim';
-      this.airborne = true;
-      this.game.telegraphLine(this.x, this.z, dx, dz, length, 1.8, this.tele(P.diveTelegraph));
-      yield* this.wait(this.tele(P.diveTelegraph));
-      this.pose = 'Dive';
-      this.clawsOn(P.diveDamage);
-      let travelled = 0;
-      const speed = this.fast(P.diveSpeed);
-      while (travelled < length && !this.dead) {
-        const step = speed * this.dt;
-        if (!this.stepYaga(dx, dz, step)) break;
-        travelled += step;
-        yield;
-      }
-      this.clawsOff();
-      if (this.dead) return;
-      // Ступа увязла в земле — главное окно для ударов.
-      this.airborne = false;
-      this.pose = 'Stuck';
-      this.game.shake(0.25, 0.3);
-      this.game.floatText(this.x, this.z, 2.6, 'Завязла!', '#ffd94d', 1.2);
-      yield* this.wait(P.stuckWindow * (this.d.extra ? 0.7 : 1));
-      this.airborne = true;
-      this.pose = 'Hover';
+      yield* this.diveAt(target, this.tele(P.diveTelegraph));
     }
+  }
+
+  /** Пикирует на цель и вязнет в земле. */
+  *diveAt(target, telegraph) {
+    const [dx, dz] = norm(target.x - this.x, target.z - this.z);
+    const length = Math.min(Math.hypot(target.x - this.x, target.z - this.z) + 2.5, 24);
+    this.face(dx, dz);
+    this.pose = 'Aim';
+    this.airborne = true;
+    this.game.telegraphLine(this.x, this.z, dx, dz, length, 1.8, telegraph);
+    yield* this.wait(telegraph);
+    this.pose = 'Dive';
+    this.clawsOn(P.diveDamage);
+    let travelled = 0;
+    const speed = this.fast(P.diveSpeed);
+    while (travelled < length && !this.dead) {
+      const step = speed * this.dt;
+      if (!this.stepYaga(dx, dz, step)) break;
+      travelled += step;
+      yield;
+    }
+    this.clawsOff();
+    if (this.dead) return;
+    // Ступа увязла в земле — главное окно для ударов.
+    this.airborne = false;
+    this.pose = 'Stuck';
+    this.game.shake(0.25, 0.3);
+    this.game.floatText(this.x, this.z, 2.6, 'Завязла!', '#ffd94d', 1.2);
+    yield* this.wait(P.stuckWindow * (this.d.extra ? 0.7 : 1));
+    this.airborne = true;
+    this.pose = 'Hover';
   }
 
   /** Череп на заборе у богатыря стреляет веером костей, среднюю можно парировать. */
@@ -307,22 +315,17 @@ export class Yaga {
     yield* this.wait(0.3);
   }
 
-  /** «Фу-фу, русским духом пахнет!» — кто остался на месте, того она находит. */
+  /** Чует богатыря: вокруг него сжимается кольцо. Остался на месте — Яга сразу пикирует, ушёл — потеряла след. */
   *sniff() {
     const target = this.pickTarget();
     if (!target) return;
     this.pose = 'Sniff';
-    const x0 = target.x, z0 = target.z;
-    this.game.floatText(this.x, this.z, 3.4, 'Фу-фу, русским духом пахнет!', '#ffb066', P.sniffTime + 0.3);
-    yield* this.wait(this.tele(P.sniffTime));
-    if (this.dead || Math.hypot(target.x - x0, target.z - z0) >= P.sniffMoved) {
-      this.game.floatText(this.x, this.z, 3.2, 'Где ты, молодец?', '#d9cfa8', 1);
-      return;
-    }
-    this.game.telegraphCircle(target.x, target.z, 1.6, this.tele(0.45), 'danger');
-    const x = target.x, z = target.z;
-    yield* this.wait(this.tele(0.45));
-    this.game.spawnZone(x, z, 1.6, 'strike', 0.15, P.sniffDamage, 0, 'dust');
+    const x0 = target.x, z0 = target.z, time = this.tele(P.sniffTime);
+    this.game.send(target, { t: 'sniff', duration: time, moved: P.sniffMoved });
+    yield* this.wait(time);
+    if (this.dead) return;
+    if (Math.hypot(target.x - x0, target.z - z0) < P.sniffMoved) yield* this.diveAt(target, this.tele(0.3));
+    else this.game.floatText(target.x, target.z, 2.8, 'Не учуяла!', '#7be08a', 1);
   }
 
   // ---------------------------------------------------------------- Фаза 2: избушка
@@ -348,7 +351,7 @@ export class Yaga {
     // Заговор «Повернись, избушка!» — отворачивается и не нападает.
     if (hut.turnedUntil > this.now) { yield* this.wait(0.3); return; }
     // Проверка без людей: избушка падает сама.
-    if (this.game.flags.debugwin && this.onRoof) { this.hitHut(P.legHits); yield; return; }
+    if (this.game.flags.debugwin && this.onRoof) { this.hitHut(hut.max); yield; return; }
     yield* this.wait(0.7 / this.d.attackSpeed);
     if (this.atFloor) return;
     const distance = Math.hypot(target.x - hut.x, target.z - hut.z);
@@ -457,19 +460,20 @@ export class Yaga {
     }
   }
 
-  /** Попали по ноге избушки. Три раза — падает, Яга слетает с крыши. weight: стрела считается за половину. */
-  hitHut(weight = 1) {
+  /** Удар по избушке. Здоровье кончилось — падает, Яга слетает с крыши. Возвращает, сколько прошло. */
+  hitHut(amount) {
     const hut = this.hut;
-    if (!hut.active || hut.fallen || hut.seated || this.dead || !this.onRoof) return;
-    hut.legHits += weight;
-    this.game.showDamage(hut.x, hut.z, Math.floor(hut.legHits));
-    if (hut.legHits >= P.legHits) this.interrupt(this.hutFall());
+    if (!hut.active || hut.fallen || hut.seated || this.dead || !this.onRoof || this.now < hut.guardUntil) return 0;
+    const dealt = Math.min(hut.hp, amount);
+    hut.hp -= dealt;
+    this.game.showDamage(hut.x, hut.z, dealt);
+    if (hut.hp <= 0) this.interrupt(this.hutFall());
+    return dealt;
   }
 
   *hutFall() {
     const hut = this.hut;
     hut.fallen = true;
-    hut.legHits = 0;
     this.onRoof = false;
     this.airborne = false;
     this.health.invulnerable = false;
@@ -478,7 +482,10 @@ export class Yaga {
     this.game.shake(0.6, 0.5);
     this.game.floatText(this.x, this.z, 3, 'Рухнула!', '#ffd94d', 1.6);
     yield* this.wait(P.fallWindow * (this.d.extra ? 0.75 : 1));
+    // Встаёт с полным здоровьем и пару секунд не поддаётся, чтобы её нельзя было ронять без передышки.
     hut.fallen = false;
+    hut.hp = hut.max;
+    hut.guardUntil = this.now + P.hutGuard;
     if (!this.atFloor) {
       this.onRoof = true;
       this.airborne = true;
@@ -494,11 +501,6 @@ export class Yaga {
     this.health.invulnerable = false;
     this.pose = 'Stunned';
     yield* this.wait(seconds);
-    if (this.phase === 2 && !this.atFloor && this.hut.active) {
-      this.onRoof = true;
-      this.health.invulnerable = true;
-      this.pose = 'Cast';
-    }
     this.airborne = this.phase !== 3;
     if (this.phase === 1) this.pose = 'Hover';
   }
@@ -670,10 +672,15 @@ export class Yaga {
 
   // ---------------------------------------------------------------- Способности богатыря
 
-  /** Верёвка с петлёй сдёргивает летящую Ягу на землю. */
+  /** Верёвка с петлёй сдёргивает летящую Ягу на землю. С крыши не достать; после рывка какое-то время не поддаётся. */
   onRope(player, range) {
-    if (this.dead || this.transition || this.cutscene || !this.airborne) return false;
+    if (this.dead || this.transition || this.cutscene || !this.airborne || this.onRoof) return false;
     if (Math.hypot(this.x - player.x, this.z - player.z) > range) return false;
+    if (this.now < (this.ropeImmuneUntil ?? 0)) {
+      this.game.floatText(this.x, this.z, 3, 'Вывернулась!', '#ff8a50', 1.2);
+      return null;
+    }
+    this.ropeImmuneUntil = this.now + P.stunImmunity;
     this.game.floatText(this.x, this.z, 3, 'Попалась!', '#ffd94d', 1.3);
     this.interrupt(this.knockedDown(P.knockdown));
     return true;
