@@ -2,7 +2,7 @@
 // детали — картинки на них. Координаты скелета — пиксели исходного арта, Y вверх; поворот против часовой — плюс.
 // Персонаж нарисован смотрящим вправо; влево — отражается целиком.
 import { assets } from './assets.js';
-import { weaponStyle, attackPose, PARRY_POSE, STOW_POSE } from './weaponanim.js';
+import { weaponStyle, attackPose, PARRY_POSE, STOW_POSE, CINE_POSES } from './weaponanim.js';
 
 // ---------------------------------------------------------------- Аффинные матрицы [a, b, c, d, e, f]
 
@@ -294,8 +294,11 @@ export class BogatyrAnimator {
   update(dt, speed, now, anim = {}) {
     const k = this.rig.k, roll = anim.roll ?? 0, atk = anim.atk ?? null, parry = anim.parry > 0;
     // Удар или парирование — оружие в руке; потом подержит и уберёт за спину.
-    const fighting = atk || parry;
-    if (fighting) { this.heldUntil = now + WEAPON_HOLD; this.stowUntil = -1; this.inHand = true; }
+    const cine = anim.cine ? CINE_POSES[anim.cine] : null;
+    const fighting = atk || parry || cine;
+    // В кат-сцене оружие за спиной, в руке другое (см. drawAwl).
+    if (cine) { this.inHand = false; this.stowUntil = -1; }
+    else if (fighting) { this.heldUntil = now + WEAPON_HOLD; this.stowUntil = -1; this.inHand = true; }
     else if (this.inHand && now >= this.heldUntil) {
       if (this.stowUntil < 0) this.stowUntil = now + STOW_TIME;
       if (now >= this.stowUntil) { this.inHand = false; this.stowUntil = -1; }
@@ -326,12 +329,13 @@ export class BogatyrAnimator {
     const style = this.style;
     const aim = style.aims && this.inHand ? (anim.aim ?? 0) * 0.6 : 0;
     let target;
-    if (atk) target = attackPose(style, atk[1], atk[2], atk[0]);
+    if (cine) target = cine;
+    else if (atk) target = attackPose(style, atk[1], atk[2], atk[0]);
     else if (parry) target = PARRY_POSE;
     else if (this.stowUntil >= 0) target = STOW_POSE;
     else if (this.inHand) target = style.ready;
     else target = { a: 0, b: this.current.b, t: 0, back: 0 };
-    const rate = 1 - Math.exp(-dt * (atk ? POSE_RATE_ATTACK : POSE_RATE_IDLE));
+    const rate = 1 - Math.exp(-dt * (atk || cine ? POSE_RATE_ATTACK : POSE_RATE_IDLE));
     const c = this.current;
     c.a += (target.a + aim - c.a) * rate;
     c.b += (target.b + aim - c.b) * rate;
@@ -434,7 +438,8 @@ function target(pose, t) {
     case 'Rise': set({ lean: 6, head: 10, armL: 15, armR: 165, handR: 30, glow: 1.4 }); break;
     case 'Swipe': set({ lean: -32, armL: 25, armR: 70 + Math.sin(t * 14) * 55, handR: 25, glow: 1.6 }); break;
     case 'Exhausted': set({ kneel: 1, bodyDrop: 0.52, lean: -50, head: -28, armL: 20, armR: 25, glow: 0.3 }); break;
-    case 'Finisher': set({ kneel: 1, bodyDrop: 0.52, lean: -30, head: 25, armL: -60, armR: 70 }); shake = 0.08; break;
+    case 'FinisherLook': set({ kneel: 1, bodyDrop: 0.52, lean: -16 + breath * 2, head: 20, armL: 14, armR: 18, glow: 1.8 }); shake = 0.015; break;
+    case 'Pierced': set({ kneel: 1, bodyDrop: 0.46, lean: 4, head: 22, armL: -168, armR: 172, handL: -75, handR: 75, glow: 0 }); shake = 0.09; break;
     case 'Blind': set({ lean: -10 + Math.sin(t * 3) * 8, head: Math.sin(t * 2.3) * 15, armL: -28, armR: 30 }); shake = 0.02; break;
     case 'Listen': set({ lean: -6, head: 28 + Math.sin(t * 12) * 3, armL: -18, armR: 22, handL: -10, handR: 10 }); break;
     case 'Charge': set({ lean: -50, head: 15, armL: 70, armR: 75, handL: 15, handR: 15 }); break;
@@ -457,7 +462,7 @@ export class LikhoAnimator {
   get glow() { return this.current.glow; }
 
   update(dt, pose, blind, speed, now) {
-    const legsWalk = pose !== 'Dead' && pose !== 'Exhausted' && pose !== 'Finisher';
+    const legsWalk = pose !== 'Dead' && pose !== 'Exhausted' && pose !== 'FinisherLook' && pose !== 'Pierced';
     const want = legsWalk && speed > 0.5 ? 1 : 0;
     this.walk += Math.sign(want - this.walk) * Math.min(Math.abs(want - this.walk), dt * 6);
     this.stepPhase += Math.min(speed, 20) * dt / 1.1 * Math.PI;

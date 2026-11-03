@@ -5,6 +5,7 @@
 // Конец: Яга без сил, богатырь говорит заветные слова — сценка, и избушка теперь его.
 import { Tasks } from './tasks.js';
 import { Health } from './health.js';
+import { Cutscene } from './cutscene.js';
 
 const P = {
   health: 900,
@@ -156,12 +157,12 @@ export class Yaga {
     return {
       kind: this.kind, name: this.name, x: r2(this.x), z: r2(this.z), fx: r2(this.fx), fz: r2(this.fz),
       hp: Math.round(this.health.hp), max: Math.round(this.health.max), pose: this.pose, phase: this.phase,
-      airborne: this.airborne, onRoof: this.onRoof, cutscene: this.cutscene,
+      airborne: this.airborne, onRoof: this.onRoof, cutscene: this.cutscene, cine: this.cine ?? null, hidden: !!this.hidden,
       finisherReady: this.finisherReady, finisherLabel: 'Сказать заветные слова',
       claws: this.claws.active ? { token: this.claws.token, damage: this.claws.damage } : null,
       arrowBox: this.onRoof ? null : { ...this.arrowBox, z0: r2(this.arrowBox.z0), z1: r2(this.arrowBox.z1) },
-      contact: 0, fenceR: P.fenceRadius, gateBite: this.gateStrikeAt > 0, stoveLit: this.phase === 3,
-      hut: { x: r2(h.x), z: r2(h.z), active: h.active, fallen: h.fallen, seated: h.seated, moving: h.moving,
+      contact: 0, fenceR: P.fenceRadius, gateBite: this.gateStrikeAt > 0, stoveLit: this.phase === 3 || !!this.ovenLit,
+      hut: { x: r2(h.x), z: r2(h.z), active: h.active, fallen: h.fallen, seated: h.seated, moving: h.moving, doorOpen: !!h.doorOpen,
         turned: h.turnedUntil > this.now, legs: this.hutLegs.map((l) => ({ x: r2(l.x), z: r2(l.z), r: l.r })), charging: h.charging, token: h.token, hp: Math.round(h.hp), max: Math.round(h.max), r: P.hutRadius },
       phaseMarks: [2 / 3, 1 / 3],
     };
@@ -182,8 +183,81 @@ export class Yaga {
   // ---------------------------------------------------------------- Ход боя
 
   *start() {
-    yield 1.2;
+    yield* this.intro();
     yield* this.fight();
+  }
+
+  /** Вступление: богатырь у забора, дверь избушки открывается, Яга вылетает к нему. После первой победы — только её вылет. */
+  *intro() {
+    const { game, hut } = this, spawn = this.scene.bossSpawn, player = this.pickTarget();
+    const first = game.results[game.currentBoss] < 0;
+    this.hidden = true;
+    this.x = hut.x; this.z = hut.z - 1;
+    const scene = new Cutscene(this, { skip: true });
+    if (first) {
+      if (player) {
+        scene.shot(player.x, player.z + 2, 0.6);
+        game.walkPlayer(player, player.x, player.z + 3, 2.6, 0, 1);
+        scene.say('Богатырь', 'Вот она, избушка на курьих ножках. Такую бы мне — по свету ездить.');
+        yield* scene.hold(2.8);
+      }
+      scene.shot(hut.x, hut.z - 1, 0.7);
+      scene.say('Богатырь', 'Эй, хозяйка! Выходи, разговор есть!');
+      yield* scene.hold(1.9);
+      scene.say('Баба-Яга', 'Кого там нелёгкая принесла?');
+      yield* scene.hold(1.5);
+    } else {
+      scene.shot(hut.x, hut.z - 1, 0.7);
+      yield* scene.hold(0.6);
+    }
+    hut.doorOpen = true;
+    game.shake(0.25, 0.4);
+    yield* scene.hold(0.4);
+    this.hidden = false;
+    this.pose = 'Hover';
+    scene.say();
+    yield* this.flyTo(scene, spawn.x, spawn.z, 11);
+    hut.doorOpen = false;
+    this.fx = spawn.fx; this.fz = spawn.fz;
+    if (first) {
+      scene.say('Баба-Яга', 'Богатырь! Сам пришёл — сам в печь и полезешь.');
+      yield* scene.hold(2.4);
+      scene.say('Богатырь', 'Избушку отдавай, бабка.');
+      yield* scene.hold(1.5);
+      scene.say('Баба-Яга', 'Ишь чего захотел! Ну, иди сюда!');
+      yield* scene.hold(1.5);
+    } else yield* scene.hold(0.5);
+    scene.end();
+  }
+
+  /** Кат-сцена: Яга летит в точку, камера за ней. */
+  *flyTo(scene, x, z, speed) {
+    while (!scene.skipped && !this.dead) {
+      const dx = x - this.x, dz = z - this.z, d = Math.hypot(dx, dz);
+      if (d < 0.1) break;
+      this.face(dx, dz);
+      this.x += dx / d * Math.min(d, speed * this.dt);
+      this.z += dz / d * Math.min(d, speed * this.dt);
+      scene.shot(this.x, this.z);
+      yield;
+    }
+    this.x = x; this.z = z;
+  }
+
+  /** Кат-сцена: избушка идёт в точку. */
+  *walkHut(scene, x, z, speed, each = null) {
+    const hut = this.hut;
+    hut.moving = true;
+    while (!scene.skipped && !this.dead) {
+      const dx = x - hut.x, dz = z - hut.z, d = Math.hypot(dx, dz);
+      if (d < 0.1) break;
+      hut.x += dx / d * Math.min(d, speed * this.dt);
+      hut.z += dz / d * Math.min(d, speed * this.dt);
+      each?.();
+      yield;
+    }
+    hut.x = x; hut.z = z;
+    hut.moving = false;
   }
 
   /** Бой идёт по текущей фазе, поэтому его можно прервать (сбили на землю) и продолжить с того же места. */
@@ -370,13 +444,23 @@ export class Yaga {
     this.clawsOff();
     this.health.invulnerable = true;
     this.pose = 'Cast';
-    this.game.announce('Избушка, вставай!');
+    const { hut } = this, scene = new Cutscene(this);
+    scene.shot(hut.x, hut.z + 1, 1.15);
+    scene.say('Баба-Яга', 'Избушка, вставай!');
+    yield* scene.hold(0.9);
     this.game.shake(0.5, 1.6);
-    this.hut.seated = false;
-    this.hut.active = true;
-    yield* this.wait(1.6);
-    this.onRoof = true;
+    this.game.flash(hut.x, hut.z, 3, 'dust');
+    hut.seated = false;
+    hut.active = true;
+    yield* scene.hold(0.8);
+    this.pose = 'Hover';
     this.airborne = true;
+    yield* this.flyTo(scene, hut.x, hut.z, 12);
+    scene.shot(hut.x, hut.z + 1);
+    this.onRoof = true;
+    this.pose = 'Cast';
+    yield* scene.hold(0.6);
+    scene.end();
     this.transition = false;
   }
 
@@ -562,22 +646,33 @@ export class Yaga {
     hut.moving = true;
     this.onRoof = false;
     this.health.invulnerable = true;
-    this.game.announce('Избушка устала, Яга у печи!');
-    // Идёт до самого своего места, откуда бы ни шла: иначе сядет посреди поляны и заслонит Ягу у печи.
-    while (!this.dead) {
-      const dx = home.x - hut.x, dz = home.z - hut.z, d = Math.hypot(dx, dz);
-      if (d <= 0.1) break;
-      hut.x += dx / d * Math.min(d, 9 * this.dt);
-      hut.z += dz / d * Math.min(d, 9 * this.dt);
-      yield;
-    }
-    hut.moving = false;
+    const scene = new Cutscene(this), stove = this.scene.stove, spotX = stove.x, spotZ = stove.z - 2.2;
+    scene.shot(hut.x, hut.z + 1, 1.15);
+    scene.say('Баба-Яга', 'Устала, родимая? Иди домой!');
+    this.airborne = true;
+    this.pose = 'Hover';
+    // Избушка идёт до самого своего места, откуда бы ни шла: иначе сядет посреди поляны и заслонит Ягу у печи.
+    yield* this.walkHut(scene, home.x, home.z, 9, () => {
+      scene.shot(hut.x, hut.z + 1);
+      const dx = spotX - this.x, dz = spotZ - this.z, d = Math.hypot(dx, dz);
+      if (d > 0.1) { this.face(dx, dz); this.x += dx / d * Math.min(d, 9 * this.dt); this.z += dz / d * Math.min(d, 9 * this.dt); }
+    });
     hut.active = false;
     hut.seated = true;
-    const stove = this.scene.stove;
-    this.x = stove.x; this.z = stove.z - 2.2;
+    this.game.flash(hut.x, hut.z, 3, 'dust');
+    this.game.shake(0.3, 0.4);
+    yield* scene.hold(0.6);
+    scene.shot(spotX, spotZ + 1, 0.6);
+    yield* this.flyTo(scene, spotX, spotZ, 12);
+    scene.shot(spotX, spotZ + 1, 0.6);
     this.airborne = false;
     this.pose = 'Stand';
+    this.ovenLit = true;
+    this.game.flash(stove.x, stove.z - 1, 2);
+    this.game.shake(0.3, 0.5);
+    scene.say('Баба-Яга', 'А я печку растоплю. Сейчас ты у меня попляшешь!');
+    yield* scene.hold(2);
+    scene.end();
     this.transition = false;
   }
 
@@ -777,20 +872,43 @@ export class Yaga {
     this.finisherReady = false;
     if (this.dead) return;
 
-    this.cutscene = true;
-    if (this.finisher) {
-      const [x, z] = this.clampToArena(this.x, this.z - 2);
-      this.game.teleport(this.finisher, x, z, 0, 1);
-      this.game.floatText(x, z, 3, '«Избушка, избушка, повернись ко мне передом!»', '#ffd966', 3);
-    }
-    yield* this.wait(1.2);
-    this.hut.seated = false;
-    this.game.shake(0.5, 1);
-    yield* this.wait(1);
+    yield* this.turnHut(this.finisher);
     this.health.invulnerable = false;
     this.health.floor = 0;
     this.health.hp = 0;
     this.onDepleted();
+  }
+
+  /** Финал: заветные слова. Избушка встаёт, поворачивается к богатырю передом и идёт к нему. */
+  *turnHut(player) {
+    const { game, hut } = this, scene = new Cutscene(this, { skip: true });
+    const px = hut.x + 1.5, pz = hut.z - 6.5;
+    scene.shot(hut.x, hut.z - 2, 1.3);
+    if (player) {
+      const speed = Math.max(6, Math.hypot(player.x - px, player.z - pz) / 1.2);
+      game.walkPlayer(player, px, pz, speed, 0, 1);
+      yield* scene.hold(1.2);
+      game.teleport(player, px, pz, 0, 1, true);
+      scene.pose(player, 'speak');
+    }
+    scene.say('Богатырь', 'Избушка, избушка, повернись ко мне передом, а к лесу задом!');
+    yield* scene.hold(2.6);
+    // Встаёт спиной, потом разворачивается.
+    hut.turnedUntil = this.now + 60;
+    hut.seated = false;
+    game.flash(hut.x, hut.z, 3, 'dust');
+    game.shake(0.5, 1);
+    scene.say();
+    yield* scene.hold(1.2);
+    hut.turnedUntil = 0;
+    game.shake(0.35, 0.4);
+    yield* scene.hold(0.7);
+    yield* this.walkHut(scene, hut.x, hut.z - 2, 3);
+    scene.pose(player, null);
+    scene.shot(this.x, this.z, 0.55);
+    scene.say('Баба-Яга', 'Ох… Забирай, окаянный. Всё равно ноги у неё кривые.');
+    yield* scene.hold(2.4);
+    scene.end();
   }
 
   startFinisher(player) {
@@ -802,14 +920,15 @@ export class Yaga {
     this.dead = true;
     this.tasks.stopAll();
     this.clawsOff();
-    this.cutscene = false;
     this.finisherReady = false;
     this.onRoof = false;
     this.airborne = false;
     this.hut.charging = false;
     this.pose = 'Dead';
+    const scene = new Cutscene(this);
+    scene.shot(this.hut.x, this.hut.z - 1, 0.9);
+    scene.say(null, 'Избушка теперь твоя.');
     this.game.recordVictory();
-    this.game.announce('Избушка теперь твоя!');
     this.tasks.start((function* (self) { yield 0.5; self.game.bossDefeated(); })(this));
   }
 }

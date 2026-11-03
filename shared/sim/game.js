@@ -128,6 +128,10 @@ export class Game {
         break;
       }
       case 'struggle': this.struggle(player); break;
+      case 'skipCine':
+        // Пропуск работает не сразу: то же нажатие могло начать сцену.
+        if (this.boss?.cine?.skip && this.clock.now - this.boss.cine.at > 0.5) this.boss.cineSkipped = true;
+        break;
       case 'fire': this.firePlayer(player, m); this.boss?.hear?.(player.x, player.z); break;
       case 'spendCard': player.cards = Math.max(0, player.cards - Math.min(Math.max(m.amount | 0, 1), CARDS.max)); break;
       case 'fx':
@@ -733,10 +737,14 @@ export class Game {
   }
   cancelTelegraph(id) { this.broadcast({ t: 'teleCancel', id }); }
 
-  teleport(player, x, z, fx, fz) {
+  /** soft — камера не прыгает следом (для кат-сцен). */
+  teleport(player, x, z, fx, fz, soft = false) {
     player.x = x; player.z = z;
-    this.send(player, { t: 'teleport', x, z, fx, fz });
+    this.send(player, { t: 'teleport', x, z, fx, fz, soft });
   }
+
+  /** Кат-сцена: богатырь сам идёт в точку и поворачивается в сторону (fx, fz). */
+  walkPlayer(player, x, z, speed, fx, fz) { this.send(player, { t: 'walkTo', x, z, speed, fx, fz }); }
 
   setCurse(cursed) {
     for (const p of this.players) { p.cursed = cursed; if (!cursed) p.slipperyUntil = 0; }

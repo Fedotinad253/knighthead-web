@@ -102,7 +102,17 @@ class Game {
         }
         break;
       }
-      case 'teleport': this.local.teleport(m.x, m.z, m.fx, m.fz); this.view.snap(m.x, m.z); break;
+      case 'teleport': this.local.teleport(m.x, m.z, m.fx, m.fz); if (!m.soft) this.view.snap(m.x, m.z); break;
+      case 'walkTo': this.local.walkTo(m.x, m.z, m.speed, m.fx, m.fz); break;
+      case 'pierce':
+        // Шило вошло в глаз: замирание, белая вспышка, кровь, камера дёргается вперёд.
+        this.hitStop(0.24);
+        this.flashScreen('255,250,235', 0.85, 0.3);
+        this.view.zoom *= 0.88;
+        if (this.boss) this.boss.bloodBurst = 34;
+        blip('hitBig');
+        blip('kill');
+        break;
       case 'announce': this.hud.announce(m.text); break;
       case 'shake': this.view.shake(m.amount, m.duration, this.now); break;
       case 'flash': this.vfx.flash(m.x, m.z, m.r, m.look); break;
@@ -265,11 +275,13 @@ class Game {
       this.mapView.draw();
     } else {
       this.view.runShake = 0;
-      const cinematic = this.boss?.cutscene;
-      const [tx, tz, zoom] = cinematic ? [this.boss.x, this.boss.z, 0.5] : this.cameraTarget();
+      const cinematic = this.boss?.cutscene, cine = this.boss?.cine;
+      // В кат-сцене камера смотрит не на ноги, а на середину фигуры.
+      const CINE_LIFT = 1.3;
+      const [tx, tz, zoom] = cinematic ? [cine?.x ?? this.boss.x, (cine?.z ?? this.boss.z) + CINE_LIFT, cine?.zoom ?? 0.5] : this.cameraTarget();
       // Отдаление меняется медленнее, чем сдвиг, — чтобы картинка не «дышала».
       [this.view.zoom, this.zoomVelocity] = smoothDamp(this.view.zoom, zoom, this.zoomVelocity ?? 0, cinematic ? 0.4 : 0.8, dt);
-      this.view.update(tx, tz, dt, this.now, cinematic ? 0.5 : 0.35);
+      this.view.update(tx, tz, dt, this.now, cinematic ? 0.6 : 0.35);
       drawWorld(this);
     }
     this.input.endFrame();

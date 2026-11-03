@@ -91,6 +91,16 @@ const STYLES = {
 const FALLBACK = STYLES['Меч'];
 export const weaponStyle = (weapon) => STYLES[weapon?.name] ?? FALLBACK;
 
+/** Позы богатыря в кат-сценах, оружие при этом за спиной. */
+export const CINE_POSES = {
+  awlDraw: p(55, 0, 2, -5), // достал шило
+  awlWind: p(155, 0, 14, 35), // замахнулся
+  awlStrike: p(108, 0, -20, -30), // удар в глаз
+  awlHold: p(106, 0, -16, -25),
+  awlPull: p(70, 0, 8, 5),
+  speak: p(115, 0, 4, 15), // рука протянута вперёд
+};
+
 /** Защитная поза при парировании. */
 export const PARRY_POSE = p(100, 80, 5, 25);
 /** Рука тянется за спину, когда убирает оружие. */

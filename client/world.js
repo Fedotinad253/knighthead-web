@@ -42,7 +42,9 @@ export function drawWorld(game) {
   const exits = game.session?.firstYaga ? [] : (scene.interactables ?? []).filter((item) => item.kind === 'exit');
   for (const item of exits) add(item.z + 1, () => drawExit(view, item, game.now));
 
-  for (const p of game.players) if (p.visible) add(p.z, () => drawPlayer(game, p));
+  // В некоторых кат-сценах босс и богатырь рисуются поверх всего, чтобы их не заслоняли кусты.
+  const front = game.boss?.cine?.front;
+  for (const p of game.players) if (p.visible) add(front ? -1e6 - 1 : p.z, () => drawPlayer(game, p));
   // Морок: полупрозрачный двойник того, кто его наслал.
   const decoy = game.latest?.decoy, caster = decoy && game.players.find((p) => p.id === decoy.owner);
   if (caster) add(decoy.z, () => {
@@ -57,7 +59,7 @@ export function drawWorld(game) {
     const hidden = b.pose === 'Hidden' || b.pose === 'Peek';
     if (b.hut) add(b.hut.z, () => drawHut(game, b.hut));
     // Яга на крыше рисуется поверх избушки.
-    add(b.onRoof ? b.hut.z - 0.5 : b.z + (hidden ? 0.6 : 0), () => (b.kind === 'yaga' ? drawYaga(game, b) : drawBoss(game, b)));
+    add(front ? -1e6 : b.onRoof ? b.hut.z - 0.5 : b.z + (hidden ? 0.6 : 0), () => (b.kind === 'yaga' ? drawYaga(game, b) : drawBoss(game, b)));
   }
   for (const h of game.liveHazards()) if (h.type === 'proj') add(h.z, () => (h.wide || h.look ? drawWideProjectile(view, h, game.now, game.local) : drawOrb(view, h, game.now)));
   for (const a of game.liveArrows()) add(a.z, () => drawArrow(view, a));
@@ -70,6 +72,8 @@ export function drawWorld(game) {
   if (scene.id === 'forest') for (const l of lights) { l.x += Math.sin(game.now * 0.5 + l.z) * 1.2; l.z += Math.cos(game.now * 0.4 + l.x) * 0.8; }
   for (const p of game.players) if (p.visible) lights.push({ x: p.x, z: p.z, y: 1, radius: 3.2, intensity: 0.35 });
   if (game.boss?.eye) lights.push(game.boss.eye);
+  // В кат-сцене то, на что смотрим, должно быть видно и в ночном лесу.
+  if (game.boss?.cine) lights.push({ x: game.boss.cine.x, z: game.boss.cine.z, y: 2.5, radius: 7, intensity: 0.6, color: '255,225,190' });
   for (const e of effects) if (e.kind === 'coals') lights.push({ x: e.x, z: e.z, y: 0.6, radius: e.r + 2, intensity: 0.55, color: '255,140,50', flicker: true });
   view.lighting(scene.light.ambient, lights, scene.light.tint, game.now);
 
@@ -98,9 +102,96 @@ export function drawWorld(game) {
   if (game.boss?.kind === 'dummy') view.label(game.boss.x, game.boss.z, 3.4, game.boss.name, '#ffe9a8', 0.4);
   drawBossStatus(game);
   game.vfx.drawTop(view);
+  drawEyeBlood(game);
+  drawAwlGlow(game);
   drawCooldowns(game);
   drawScreenEffects(game);
   if (game.showHitboxes) drawHitboxes(game);
+}
+
+/** Кровь из выколотого глаза: брызги от удара, потом капает всю третью фазу. Координаты — метры от ног Лиха. */
+function drawEyeBlood(game) {
+  const b = game.boss, { view, now } = game;
+  if (!b?.eyeAt || (!b.eyeBleed && !b.drops?.length)) return;
+  const dt = Math.min(0.05, Math.max(0, now - (b.bloodAt ?? now)));
+  b.bloodAt = now;
+  const drops = b.drops ??= [], side = b.flip ? -1 : 1;
+  const emit = (fast) => drops.push({
+    x: b.eyeAt[0], y: b.eyeAt[1], r: 0.012 + Math.random() * 0.018,
+    vx: fast ? side * (0.5 + Math.random() * 5) : side * Math.random() * 0.25, vy: fast ? Math.random() * 5 - 0.5 : 0,
+  });
+  for (; b.bloodBurst > 0; b.bloodBurst--) emit(true);
+  if (b.eyeBleed && b.pose !== 'Dead') {
+    b.dripDebt = (b.dripDebt ?? 0) + dt * (b.cine ? 14 : 1.5);
+    for (; b.dripDebt >= 1 && drops.length < 160; b.dripDebt--) emit(false);
+  }
+  const [px, py] = view.project(b.x, b.z), ctx = view.ctx;
+  ctx.strokeStyle = '#8c1410';
+  ctx.lineCap = 'round';
+  b.drops = drops.filter((d) => {
+    d.vy -= 8 * dt;
+    d.x += d.vx * dt; d.y += d.vy * dt;
+    if (d.y <= 0) return false;
+    // Капля вытянута вдоль полёта.
+    const x = px + d.x * view.s, y = py - d.y * view.s;
+    ctx.lineWidth = Math.max(1, d.r * 2 * view.s);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x - d.vx * 0.018 * view.s, y + d.vy * 0.018 * view.s);
+    ctx.stroke();
+    return true;
+  });
+}
+
+/** Шило в руке богатыря: рукоять и раскалённый к острию стержень. Смотрит в глаз Лиха, при ударе достаёт до него. */
+function drawAwl(game, p, base) {
+  const { view } = game, ctx = view.ctx, s = view.s, pose = p.anim.cine;
+  const [hx, hy] = p.rig.screenPoint(base, 'weapon');
+  const b = game.boss, side = p.flip ? -1 : 1;
+  let dx = side * 0.7, dy = -0.7, length = 0.8 * s;
+  if (b?.eyeAt && pose !== 'awlDraw') {
+    const [bx, by] = view.project(b.x, b.z), ex = bx + b.eyeAt[0] * s - hx, ey = by - b.eyeAt[1] * s - hy, d = Math.hypot(ex, ey) || 1;
+    dx = ex / d; dy = ey / d;
+    if (pose === 'awlStrike' || pose === 'awlHold') length = Math.min(d, 1.25 * s);
+  }
+  const tx = hx + dx * length, ty = hy + dy * length, nx = -dy, ny = dx, w = s * 0.035;
+  ctx.save();
+  // Рукоять.
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = '#2c1a0e';
+  ctx.lineWidth = s * 0.11;
+  ctx.beginPath(); ctx.moveTo(hx - dx * s * 0.14, hy - dy * s * 0.14); ctx.lineTo(hx + dx * s * 0.14, hy + dy * s * 0.14); ctx.stroke();
+  // Стержень сужается к острию и раскаляется.
+  const g = ctx.createLinearGradient(hx, hy, tx, ty);
+  g.addColorStop(0, '#5a5650');
+  g.addColorStop(0.45, '#c8481c');
+  g.addColorStop(0.8, '#ffb040');
+  g.addColorStop(1, '#fff6d8');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(hx + nx * w, hy + ny * w);
+  ctx.lineTo(tx, ty);
+  ctx.lineTo(hx - nx * w, hy - ny * w);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+  game.awlTip = { x: tx, y: ty, at: game.now };
+}
+
+/** Свечение острия шила — поверх темноты. */
+function drawAwlGlow(game) {
+  const tip = game.awlTip;
+  if (!tip || game.now - tip.at > 0.05) return;
+  const ctx = game.view.ctx, r = game.view.s * (0.34 + Math.sin(game.now * 30) * 0.04);
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const g = ctx.createRadialGradient(tip.x, tip.y, 0, tip.x, tip.y, r);
+  g.addColorStop(0, 'rgba(255,220,150,0.95)');
+  g.addColorStop(0.35, 'rgba(255,130,40,0.45)');
+  g.addColorStop(1, 'rgba(255,90,20,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(tip.x, tip.y, r, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
 }
 
 /** Под ногами богатыря: готовы ли перекат и щит. Пока идёт перезарядка, значок серый и вокруг него набирается дуга. */
@@ -423,6 +514,7 @@ function drawPlayer(game, p) {
     overlay: flash ? '#ffffff' : (blink || p.downed) ? '#000000' : null,
     overlayAlpha: flash ? 0.7 : blink ? 0.45 : p.downed ? 0.35 : 0,
   });
+  if (p.anim?.cine?.startsWith('awl')) drawAwl(game, p, base);
   if (p.anim?.parry > 0) {
     // Щит: быстро вскидывается, к концу окна угасает свечение.
     const left = p.anim.parry, age = PLAYER.parryWindow - left;
@@ -457,6 +549,9 @@ function drawBoss(game, b) {
     if (!hiddenInBush) view.groundEllipse(b.x, b.z, 0.9, 0.7, 'rgba(0,0,0,0.35)');
     const base = b.rig.base(view, b.x, b.z, { flip: b.flip, squash: b.squash ?? 1 });
     b.rig.draw(ctx, base, { overlay: flash ? '#ffffff' : null, overlayAlpha: flash ? 0.6 : 0 });
+    // Где глаз, в метрах от ног: туда целится шило и оттуда течёт кровь.
+    const [footX, footY] = view.project(b.x, b.z), [eyeX, eyeY] = b.rig.screenPoint(base, 'eye');
+    b.eyeAt = [(eyeX - footX) / view.s, (footY - eyeY) / view.s];
     if (b.pose === 'Stunned') drawStars(view, b.x, b.z, 3.2, game.now);
     // Горящий глаз светит в ночном лесу.
     const glow = b.eyeBlind ? 0 : b.animator.glow;

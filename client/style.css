@@ -149,3 +149,16 @@ canvas#game { position: fixed; inset: 0; width: 100vw; height: 100vh; display: b
 .volume { display: flex; align-items: center; gap: 12px; margin: 8px 0; font-size: 16px; color: var(--gold); }
 .volume input { flex: 1; accent-color: #d99a2a; }
 #volume-value { min-width: 3em; text-align: right; color: var(--ink); }
+
+/* Кат-сцена: чёрные полосы, реплика внизу, интерфейс боя убран. */
+#cine-top, #cine-bottom { position: fixed; left: 0; right: 0; height: 0; background: #060504; transition: height 0.35s ease; overflow: hidden; pointer-events: none; z-index: 5; }
+#cine-top { top: 0; }
+#cine-bottom { bottom: 0; }
+body.cine #cine-top { height: 9vh; }
+body.cine #cine-bottom { height: 15vh; }
+#cine-line { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(820px, 88vw); text-align: center; font-size: clamp(16px, 2.4vh, 22px); line-height: 1.35; }
+#cine-line b { color: var(--gold); margin-right: 8px; }
+#cine-line i { color: #c9c2b2; }
+#cine-skip { position: absolute; right: 18px; bottom: 10px; opacity: 0.55; }
+#me, #mate, #boss, #hint, #hits, #prompt, #announce { transition: opacity 0.25s; }
+body.cine #me, body.cine #mate, body.cine #boss, body.cine #hint, body.cine #hits, body.cine #prompt, body.cine #announce { opacity: 0 !important; }

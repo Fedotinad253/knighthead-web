@@ -99,16 +99,19 @@ function drawLimb(view, path, ax, ay, bx, by, width) {
   ctx.restore();
 }
 
-/** Куриная нога. phase — шаг. */
-function drawLeg(view, x, z, side, phase) {
+/** Куриная нога. phase — шаг, height — на какой высоте стоит дом. */
+function drawLeg(view, x, z, side, phase, height = LEG_HEIGHT) {
   const footX = x + side * 1.5 + Math.sin(phase) * 0.7, lift = Math.max(0, Math.cos(phase)) * 0.5;
   const [fx, fy] = view.project(footX, z, lift + 0.5);
-  const [kx, ky] = view.project(x + side * 2, z, LEG_HEIGHT * 0.56);
-  const [hx, hy] = view.project(x + side * 1.3, z, LEG_HEIGHT + 0.4);
+  const [kx, ky] = view.project(x + side * 2, z, height * 0.56);
+  const [hx, hy] = view.project(x + side * 1.3, z, height + 0.4);
   drawLimb(view, 'yaga/leg_shin.png', kx, ky, fx, fy, 1.1);
   drawLimb(view, 'yaga/leg_thigh.png', hx, hy, kx, ky, 2);
   drawStanding(view, 'yaga/leg_foot.png', footX, z, 1.5, side < 0, lift);
 }
+
+/** Насколько избушка поднялась на ногах: 0 — сидит, 1 — стоит. Встаёт и садится не мгновенно. */
+let hutLift = 0, hutLiftAt = 0;
 
 /** Избушка. Сидит с ногами под собой, встаёт на анимированные ноги, падает, отворачивается. */
 export function drawHut(game, hut) {
@@ -119,22 +122,29 @@ export function drawHut(game, hut) {
   ctx.save();
   ctx.globalAlpha = inFront ? 0.5 : 1;
   view.groundEllipse(x, z, 3.6, 2.4, 'rgba(0,0,0,0.3)');
+  const liftStep = Math.max(0, game.now - hutLiftAt) * 1.5;
+  hutLiftAt = game.now;
+  hutLift = hut.seated || hut.fallen ? Math.max(0, hutLift - liftStep) : Math.min(1, hutLift + liftStep);
+  const open = game.boss?.stoveLit || hut.doorOpen;
   if (hut.fallen) drawStanding(view, 'yaga/hut_fallen.png', x, z, 5);
-  else if (hut.seated) drawStanding(view, game.boss?.stoveLit ? 'yaga/hut_door_open.png' : 'yaga/hut_idle.png', x, z, game.boss?.stoveLit ? 4.4 : 6.2);
+  else if (hut.seated && hutLift <= 0) drawStanding(view, open ? 'yaga/hut_door_open.png' : 'yaga/hut_idle.png', x, z, open ? 4.4 : 6.2);
   else {
-    const phase = hut.moving ? game.now * (hut.charging ? 16 : 7) : 0;
-    drawLeg(view, x, z - 1, -1, phase);
-    drawLeg(view, x, z - 1, 1, phase + Math.PI);
-    drawStanding(view, hut.turned ? 'yaga/hut_back.png' : 'yaga/hut_front.png', x, z - 1, 4.6, false, LEG_HEIGHT);
+    const phase = hut.moving ? game.now * (hut.charging ? 16 : 7) : 0, height = LEG_HEIGHT * hutLift;
+    drawLeg(view, x, z - 1, -1, phase, height);
+    drawLeg(view, x, z - 1, 1, phase + Math.PI, height);
+    drawStanding(view, hut.turned ? 'yaga/hut_back.png' : 'yaga/hut_front.png', x, z - 1, 4.6, false, height);
   }
   ctx.restore();
 }
 
 /** Яга в ступе: из рисунков. В полёте покачивается, на крыше сидит над избушкой, сбитая лежит. */
 export function drawYaga(game, b) {
+  if (b.hidden) return;
   const { view } = game, ctx = view.ctx, s = view.s;
   const flash = game.now < (b.flashUntil ?? 0);
-  const y = b.onRoof ? LEG_HEIGHT + 3.4 : b.airborne ? 2.4 + Math.sin(game.now * 3) * 0.2 : 0;
+  // Высота меняется плавно: на крышу взлетает, а не прыгает.
+  const wantY = b.onRoof ? LEG_HEIGHT + 3.4 : b.airborne ? 2.4 + Math.sin(game.now * 3) * 0.2 : 0;
+  const y = b.flyY = (b.flyY ?? wantY) + (wantY - (b.flyY ?? wantY)) * 0.14;
   if (!b.onRoof) view.groundEllipse(b.x, b.z, 0.8, 0.6, 'rgba(0,0,0,0.35)');
   const flip = b.flip ?? b.fx < 0;
   const down = b.pose === 'Stunned' || b.pose === 'Exhausted' || b.pose === 'Dead';

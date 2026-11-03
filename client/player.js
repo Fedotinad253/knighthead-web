@@ -81,6 +81,16 @@ export class LocalPlayer {
     return l > 0.05 ? [dx / l, dz / l] : [this.fx, this.fz];
   }
 
+  /** Кат-сцена ведёт богатыря сама. */
+  walkTo(x, z, speed, fx, fz) { this.walk = { x, z, speed, fx, fz }; }
+  walkStep(dt) {
+    const w = this.walk, dx = w.x - this.x, dz = w.z - this.z, d = Math.hypot(dx, dz);
+    if (d < 0.05) { this.setFacing(w.fx, w.fz); this.walk = null; return; }
+    const v = Math.min(w.speed, d / dt);
+    this.vx = dx / d * v; this.vz = dz / d * v;
+    this.setFacing(dx, dz);
+  }
+
   setFacing(x, z) { const l = Math.hypot(x, z); if (l > 1e-3) { this.fx = x / l; this.fz = z / l; } }
 
   // ---------------------------------------------------------------- Кадр
@@ -99,7 +109,9 @@ export class LocalPlayer {
     if (locked || me.downed || this.stunned) {
       this.vx = this.vz = 0;
       if (locked || me.downed) this.cancelAttack();
+      if (this.walk) this.walkStep(dt);
     } else {
+      this.walk = null;
       if (input.dashPressed) this.tryRoll();
       if (this.now < this.dashUntil) {
         // Рывок приёма: короткий и быстрый, направление не меняется.
@@ -155,6 +167,7 @@ export class LocalPlayer {
       parry: this.parrying ? Math.round((this.parryUntil - this.now) * 100) / 100 : 0,
       blink: this.now < this.blinkUntil ? Math.round((this.blinkUntil - this.now) * 100) / 100 : 0,
       stun: this.stunned,
+      cine: this.game.boss?.cine?.actor === this.game.myId ? this.game.boss.cine.pose : null,
       roll: Math.round(this.rollProgress * 100) / 100,
     };
   }

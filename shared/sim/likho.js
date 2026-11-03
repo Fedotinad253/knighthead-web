@@ -6,6 +6,7 @@
 // Фаза 3 «Слепое бешенство»: мечется, врезается в деревья и оглушается, машет руками вокруг себя.
 import { Tasks } from './tasks.js';
 import { Health } from './health.js';
+import { Cutscene } from './cutscene.js';
 
 const P = {
   baseHealth: 1500, coopHealthBonus: 0.5,
@@ -18,7 +19,7 @@ const P = {
   /** Слепое Лихо слышит атаки: сколько прислушивается и во сколько раз быстрее бросается на звук. */
   listenTime: 0.45, rushSpeedup: 1.5, hearingMemory: 3,
   /** Сколько лежит без сил, ожидая добивания, прежде чем подняться. */
-  finisherWindow: 6,
+  finisherWindow: 6, stabDistance: 1.25,
   bodyRadius: 0.55,
   /** Урон от столкновения с телом Лиха. */
   contactDamage: 10,
@@ -38,7 +39,7 @@ const VULNERABLE = new Set(['Tired', 'Stunned', 'Exhausted']);
 const PEAS_SLOW = 0.45;
 
 /** Позы, в которых тело не ранит: спряталось, обессилело, мёртвое. */
-const HARMLESS = new Set(['Hidden', 'Peek', 'HiddenTree', 'PeekTree', 'Exhausted', 'Finisher', 'Dead']);
+const HARMLESS = new Set(['Hidden', 'Peek', 'HiddenTree', 'PeekTree', 'Exhausted', 'FinisherLook', 'Pierced', 'Dead']);
 
 const rand = (a, b) => a + Math.random() * (b - a);
 /** Наименьшее расстояние между центрами капканов (радиус 0.8): между кольцами остаётся проход. */
@@ -103,7 +104,7 @@ export class Likho {
     return {
       kind: this.kind, name: this.name, x: r2(this.x), z: r2(this.z), fx: r2(this.fx), fz: r2(this.fz),
       hp: Math.round(this.health.hp), max: Math.round(this.health.max), pose: this.pose, phase: this.phase,
-      eyeBlind: this.eyeBlind, finisherReady: this.finisherReady, cutscene: this.cutscene,
+      eyeBlind: this.eyeBlind, eyeBleed: this.eyeBleed, finisherReady: this.finisherReady, cutscene: this.cutscene, cine: this.cine ?? null,
       claws: this.claws.active ? { token: this.claws.token, damage: this.claws.damage } : null,
       contact: this.contactDamage,
       /** Где на полосе здоровья кончаются фазы (доли здоровья). */
@@ -123,7 +124,7 @@ export class Likho {
 
   *fight() {
     this.pose = 'Hidden';
-    yield 1.5;
+    yield* this.intro();
     this.setPhase(1, 2 / 3);
     while (!this.atFloor && !this.dead) yield* this.ambush();
 
@@ -157,6 +158,42 @@ export class Likho {
   }
 
   // ---------------------------------------------------------------- Фаза 1
+
+  /** Вступление: богатырь входит в лес, в кустах загорается глаз. После первой победы — только глаз и рёв. */
+  *intro() {
+    const target = this.pickTarget();
+    if (!target) { yield 1.5; return; }
+    [this.x, this.z] = this.pickHidePoint(target);
+    this.face(target.x - this.x, target.z - this.z);
+    const first = this.game.results[this.game.currentBoss] < 0, peek = this.behindTree ? 'PeekTree' : 'Peek';
+    this.pose = this.behindTree ? 'HiddenTree' : 'Hidden';
+    const scene = new Cutscene(this, { skip: true });
+    if (first) {
+      scene.shot(target.x, target.z + 1.5, 0.65);
+      scene.say(null, 'Не буди лихо, пока оно тихо, — говорили в деревне.');
+      this.game.walkPlayer(target, target.x, target.z + 3, 2.6, 0, 1);
+      yield* scene.hold(2.8);
+      scene.say('Богатырь', 'Ну, поглядим, какое ты, Лихо.');
+      yield* scene.hold(2);
+      scene.say();
+      scene.shot(this.x, this.z, 0.6);
+      this.game.flash(this.x, this.z, 1, 'dust');
+      yield* scene.hold(1.2);
+      this.pose = peek;
+      scene.say('Лихо', 'Гость… Один глаз у меня, зато всё видит.');
+      yield* scene.hold(2.4);
+    } else {
+      scene.shot(this.x, this.z, 0.6);
+      yield* scene.hold(0.6);
+      this.pose = peek;
+      yield* scene.hold(0.7);
+    }
+    this.pose = 'Roar';
+    this.game.shake(0.4, 0.9);
+    scene.say('Лихо', first ? 'Иди сюда!' : null);
+    yield* scene.hold(1);
+    scene.end();
+  }
 
   *ambush() {
     let target = this.pickTarget();
@@ -308,9 +345,13 @@ export class Likho {
     this.health.invulnerable = true;
     this.clawsOff();
     this.pose = 'Roar';
-    this.game.announce('Лихо злится!');
+    const scene = new Cutscene(this);
+    scene.inFront();
+    scene.shot(this.x, this.z, 0.6);
+    scene.say('Лихо', 'Ах так?! Будет тебе несчастье!');
     this.game.shake(0.45, 2.2);
-    yield* this.wait(2.6, false);
+    yield* scene.hold(2.2);
+    scene.end();
     this.game.announce('Проклятие несчастья!');
     this.transition = false;
     this.harmlessUntil = this.now + 1;
@@ -481,26 +522,65 @@ export class Likho {
       return false;
     }
 
-    // Сценка: богатырь перед Лихом, камера наезжает, удар в глаз, рёв.
-    this.cutscene = true;
-    const [fx, fz] = this.clampToArena(this.x + this.fx * 1.4, this.z + this.fz * 1.4);
-    if (this.finisher) this.game.teleport(this.finisher, fx, fz, -this.fx, -this.fz);
-    yield* this.wait(0.9, false);
-
-    this.pose = 'Finisher';
-    this.eyeBlind = true;
-    this.game.shake(0.7, 1.6);
-    this.game.flash(this.x + this.fx * 0.5, this.z + this.fz * 0.5, 1.4);
-    this.game.floatText(this.x, this.z, 3.6, 'ГЛАЗ!', '#ff4033', 1.8);
-    this.game.announce('Лихо ослепло!');
-    yield* this.wait(2.2, false);
-
-    this.cutscene = false;
+    yield* this.pierceEye(this.finisher);
     this.pose = 'Blind';
     // Богатырь стоит вплотную после сценки — даём отойти, прежде чем тело снова ранит.
     this.transition = false;
     this.harmlessUntil = this.now + 1.5;
     return true;
+  }
+
+  /** Как в сказке: калёное шило в единственный глаз. Богатырь подходит, замахивается, удар, Лихо ревёт, богатырь отскакивает. */
+  *pierceEye(player) {
+    const scene = new Cutscene(this, { skip: true });
+    scene.inFront();
+    // Лихо смотрит на богатыря. Если с этой стороны мало места, разворачиваем на другую.
+    let dir = player.x >= this.x ? 1 : -1;
+    let [sx, sz] = this.clampToArena(this.x + dir * P.stabDistance, this.z - 0.15);
+    if (Math.abs(sx - this.x) < P.stabDistance - 0.2) { dir = -dir; [sx, sz] = this.clampToArena(this.x + dir * P.stabDistance, this.z - 0.15); }
+    this.fx = dir; this.fz = 0;
+    this.pose = 'Exhausted';
+    scene.shot(this.x + dir * 0.7, this.z, 0.5);
+    const walkTime = Math.max(0.5, Math.hypot(player.x - sx, player.z - sz) / 6);
+    this.game.walkPlayer(player, sx, sz, 6, -dir, 0);
+    yield* scene.hold(walkTime);
+    this.game.teleport(player, sx, sz, -dir, 0, true);
+
+    scene.pose(player, 'awlDraw');
+    scene.say('Богатырь', 'Гляди в оба, Лихо. Если найдёшь чем.');
+    this.pose = 'FinisherLook';
+    yield* scene.hold(1.3);
+
+    scene.shot(this.x + dir * 0.6, this.z, 0.44);
+    scene.say();
+    scene.pose(player, 'awlWind');
+    yield* scene.hold(0.75);
+
+    scene.pose(player, 'awlStrike');
+    yield* scene.hold(0.08);
+    this.eyeBlind = true;
+    this.eyeBleed = true;
+    this.pose = 'Pierced';
+    this.game.broadcast({ t: 'pierce', x: this.x, z: this.z });
+    this.game.shake(0.8, 1.4);
+    scene.pose(player, 'awlHold');
+    scene.say('Лихо', 'А-а-а-а-а!');
+    yield* scene.hold(0.7);
+
+    // Выдёргивает шило и отскакивает: дальше Лихо рядом с ним лучше не стоять.
+    scene.pose(player, 'awlPull');
+    const [bx, bz] = this.clampToArena(sx + dir * 2, sz);
+    this.game.walkPlayer(player, bx, bz, 8, -dir, 0);
+    scene.shot(this.x + dir * 0.8, this.z, 0.55);
+    yield* scene.hold(0.5);
+
+    this.pose = 'Roar';
+    this.game.shake(0.5, 1.2);
+    scene.pose(player, null);
+    scene.say('Лихо', 'Глаз мой!.. Ничего… Я тебя и на слух достану!');
+    yield* scene.hold(1.7);
+    this.game.teleport(player, bx, bz, -dir, 0, true);
+    scene.end();
   }
 
   /** Игрок нажал взаимодействие над обессилевшим Лихом. */
@@ -619,8 +699,12 @@ export class Likho {
     this.dead = true;
     this.tasks.stopAll();
     this.clawsOff();
-    this.cutscene = false;
     this.pose = 'Dead';
+    this.eyeBleed = false;
+    const scene = new Cutscene(this);
+    scene.inFront();
+    scene.shot(this.x, this.z, 0.55);
+    scene.say(null, 'Теперь лихо и впрямь тихо.');
     this.game.setCurse(false);
     // Победа засчитывается сразу, а не после «последнего вздоха» — вдруг богатырь тут же сбежит.
     this.game.recordVictory();

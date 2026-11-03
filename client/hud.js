@@ -135,9 +135,34 @@ export class Hud {
     $('result').hidden = false;
   }
 
+  /** Полосы и реплика кат-сцены, пропуск нажатием. */
+  updateCutscene() {
+    const game = this.game, input = game.input, cine = game.boss?.cine ?? null;
+    document.body.classList.toggle('cine', !!cine);
+    if (!cine) return;
+    const key = `${cine.who}|${cine.text}`;
+    if (key !== this.cineKey) {
+      this.cineKey = key;
+      const line = $('cine-line');
+      line.textContent = '';
+      if (cine.text && cine.who) {
+        const who = document.createElement('b');
+        who.textContent = `${cine.who}:`;
+        line.append(who, cine.text);
+      } else if (cine.text) {
+        const text = document.createElement('i');
+        text.textContent = cine.text;
+        line.append(text);
+      }
+    }
+    $('cine-skip').textContent = cine.skip ? `${keyName(input.bindings.interact[0])} — пропустить` : '';
+    if (cine.skip && !input.capture && input.hitAlways('interact')) game.send({ t: 'skipCine' });
+  }
+
   update() {
     const game = this.game, input = game.input, now = game.now;
     if (now > this.announceUntil) $('announce').style.opacity = 0;
+    this.updateCutscene();
     if (!input.capture) {
       if (input.hitAlways('help')) this.toggle('controls');
       if (input.hitAlways('debug')) this.toggle('debug');
