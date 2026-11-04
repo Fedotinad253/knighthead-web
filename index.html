@@ -110,6 +110,12 @@
     <button id="menu-controls" class="button">Управление</button>
   </div>
 
-  <script type="module" src="client/main.js"></script>
+  <script type="module">
+    // GitHub Pages разрешает браузеру 10 минут не спрашивать файлы заново, и после выкладки игра могла собраться из старых.
+    // Поэтому перед запуском код обновляется в кэше браузера. Новый файл кода нужно добавить в этот список.
+    const files = ['client/assets.js', 'client/hud.js', 'client/input.js', 'client/local.js', 'client/main.js', 'client/mapview.js', 'client/player.js', 'client/rig.js', 'client/vfx.js', 'client/view.js', 'client/weaponanim.js', 'client/world.js', 'client/yagaview.js', 'shared/data.js', 'shared/progress.js', 'shared/scenes.js', 'shared/sim/cutscene.js', 'shared/sim/dummy.js', 'shared/sim/game.js', 'shared/sim/health.js', 'shared/sim/likho.js', 'shared/sim/tasks.js', 'shared/sim/yaga.js', 'client/style.css'];
+    await Promise.all(files.map((file) => fetch(file, { cache: 'reload' }).catch(() => {})));
+    await import('./client/main.js');
+  </script>
 </body>
 </html>
