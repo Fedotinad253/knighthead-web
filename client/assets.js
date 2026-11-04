@@ -31,6 +31,10 @@ export const ALL_IMAGES = [
   ...['arm_left', 'arm_right', 'eye', 'eye_blind', 'eye_glow', 'hand', 'head', 'shin_left', 'shin_right', 'thigh', 'torso']
     .map((n) => `characters/likho/${n}.png`),
   'characters/Healer.png', 'characters/Smith.png',
+  ...['floor', 'wall_back', 'wall_side'].map((n) => `hut/${n}.jpg`),
+  ...['door', 'window', 'oven', 'oven_fire', 'polati', 'spinning_wheel', 'stupa', 'bench', 'chest_open', 'chest_closed', 'table_feast', 'table_cloth', 'stool',
+    'water_jugs', 'mirror', 'herbs', 'forge_fire', 'anvil', 'weapon_rack', 'domovoy', 'domovoy_idle', 'raven', 'cat_sleep'].map((n) => `hut/${n}.png`),
+  'map/saucer.png',
   ...['Sword', 'Axe', 'Mace', 'Bow', 'Crossbow'].map((n) => `weapons/${n}.png`),
   ...['ground', 'oak1', 'oak2', 'oak1_burnt', 'oak2_burnt', 'tree1', 'tree2', 'bush1', 'bush2', 'bush_cut', 'bush_burnt', 'fern', 'mushrooms', 'stone', 'leaves', 'root', 'exit']
     .map((n) => `forest/${n}.png`),

@@ -9,10 +9,12 @@ const box = (x, z, w, d, extra = {}) => ({ type: 'box', x, z, w, d, ...extra });
 
 function tavern() {
   const obstacles = [
-    box(-10.5, -3, 1.2, 7), box(0, 10.2, 3, 1), box(-10.5, 6.5, 2, 1.2), box(10.5, 3.5, 1.2, 0.6), box(11.5, 7, 2, 2),
-    box(0, 5.5, 3.2, 2), circle(-9, 5, 0.45), circle(9, 5, 0.45),
+    box(0, 9.9, 4.2, 1.6), box(-10.2, 7.6, 3.2, 0.8), box(10.6, 3.2, 1.8, 0.8), box(10.6, 7.9, 3.4, 1.6), // печь, лавка, наковальня, горн
+    box(-10, -3, 3.8, 1.8), box(10.6, -6, 1.8, 1), box(-10.8, -8.4, 1.8, 1), // полати и сундуки
+    circle(0, 5.5, 1.3), circle(-9, 5, 0.45), circle(9, 5, 0.45), circle(8.3, -6.3, 0.35), // блюдечко, знахарка, кузнец, домовой
+    circle(-3.6, 8.9, 0.8), circle(-6.8, 8.9, 0.6), circle(4.2, 9, 0.6), circle(6.4, 9.2, 0.3), circle(2.9, 7.6, 0.55), circle(-2.7, 7.6, 0.5), // ступа, прялка, зеркало, ворон, кот, горшок
   ];
-  const tables = [[-4, -7], [4, -7], [0, 1.5]];
+  const tables = [[-4, -7], [4, -7]];
   for (const [x, z] of tables) {
     obstacles.push(circle(x, z, 0.9));
     for (let i = 0; i < 3; i++) {
@@ -21,7 +23,7 @@ function tavern() {
     }
   }
   const racks = WEAPONS.map((w, i) => ({ x: -4 + i * 2, z: -2.5 }));
-  for (const r of racks) obstacles.push(box(r.x, r.z, 0.8, 0.8));
+  for (const r of racks) obstacles.push(box(r.x, r.z, 0.8, 0.5));
 
   const interactables = [
     { id: 'healer', kind: 'npc', x: -9, z: 5, radius: 2.2, speaker: 'Знахарка Милава', lines: [
@@ -34,7 +36,11 @@ function tavern() {
       'Кузню я только разжигаю. Приходи позже — перекую так, что сам Горыныч позавидует.',
       'Меч — для ловких, топор — для злых, булава — для упрямых. А лук… для тех, кто трусит подойти. Шучу. Почти.'] },
     ...racks.map((r, i) => ({ id: `rack${i}`, kind: 'rack', weapon: i, x: r.x, z: r.z, radius: 1.6 })),
-    { id: 'map', kind: 'map', x: 0, z: 5.5, radius: 2.4, prompt: 'Склониться над картой' },
+    { id: 'domovoy', kind: 'npc', x: 8.3, z: -6.3, radius: 2, speaker: 'Домовой', lines: [
+      'Хозяйка сбежала, хозяин новый… А мне всё едино, лишь бы печь топили да молока ставили.',
+      'За каждого побитого злыдня монетку отсыплю. Из сундука, из сундука, не бойся: Яга не считала.',
+      'Кота не буди. Он как замурлычет, так и богатыри засыпают.'] },
+    { id: 'map', kind: 'map', x: 0, z: 5.5, radius: 2.4, prompt: 'Посмотреть в блюдечко' },
   ];
 
   return {
@@ -42,7 +48,7 @@ function tavern() {
     bounds: { type: 'rect', minX: -12.4, maxX: 12.4, minZ: -10.4, maxZ: 10.4 },
     spawns: [[-1.5, -6], [1.5, -6]],
     obstacles, interactables, tables, racks,
-    light: { ambient: 0.62, tint: 'rgba(255,170,90,0.10)' },
+    light: { ambient: 0.85, tint: 'rgba(255,170,90,0.08)' },
     lights: [
       { x: 0, z: 9, y: 1.5, color: '255,140,50', radius: 9, intensity: 0.55, flicker: true },
       { x: 11.5, z: 7, y: 2, color: '255,110,30', radius: 6, intensity: 0.5, flicker: true },

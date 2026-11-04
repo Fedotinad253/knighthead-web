@@ -323,23 +323,32 @@ function drawHitboxes(game) {
 
 // ---------------------------------------------------------------- Земля
 
+/** Пол и стены избушки. Плитка каждый кадр обходится дорого, поэтому пол собирается один раз. */
+let hutFloor = null;
 function drawTavernFloor(view) {
-  const ctx = view.ctx;
-  view.groundRect(0, 0, 26, 22, '#6b4a2e');
-  ctx.strokeStyle = 'rgba(0,0,0,0.18)';
-  ctx.lineWidth = Math.max(1, view.s * 0.03);
-  for (let x = -13; x <= 13; x += 1.1) {
-    const [px, top] = view.project(x, 11);
-    const [, bottom] = view.project(x, -11);
-    ctx.beginPath(); ctx.moveTo(px, top); ctx.lineTo(px, bottom); ctx.stroke();
+  const ctx = view.ctx, floor = assets.image('hut/floor.jpg'), back = assets.image('hut/wall_back.jpg'), side = assets.image('hut/wall_side.jpg');
+  if (!floor?.naturalWidth || !back?.naturalWidth || !side?.naturalWidth) { view.groundRect(0, 0, 26, 22, '#3a2a1c'); return; }
+  const density = 48, width = 26, depth = 22, tile = 5;
+  if (!hutFloor) {
+    hutFloor = document.createElement('canvas');
+    hutFloor.width = width * density; hutFloor.height = Math.round(depth * SIN * density);
+    const bake = hutFloor.getContext('2d'), w = tile * density, h = w * SIN;
+    for (let x = 0; x < hutFloor.width; x += w) for (let y = 0; y < hutFloor.height; y += h) bake.drawImage(floor, x, y, w, h);
   }
-  // Ковёр посреди зала.
-  view.groundRect(0, -2.5, 12, 6.5, '#5a2622');
-  view.groundRect(0, -2.5, 11, 5.5, '#7a3a2a');
-  // Стены: дальняя (север) и боковые.
-  view.box(0, 11, 26, 0.5, 3, '#4d3320');
-  view.box(-13, 0, 0.5, 22, 3, '#4d3320');
-  view.box(13, 0, 0.5, 22, 3, '#4d3320');
+  const [x0, y0] = view.project(-width / 2, depth / 2), [x1, y1] = view.project(width / 2, -depth / 2);
+  ctx.drawImage(hutFloor, x0, y0, x1 - x0, y1 - y0);
+  // Дальняя стена: брёвна от пола вверх.
+  const wallHeight = 4.2, wallTile = wallHeight * back.naturalWidth / back.naturalHeight;
+  for (let x = -width / 2 - 1; x < width / 2 + 1; x += wallTile) {
+    const [px, py] = view.project(x, depth / 2);
+    ctx.drawImage(back, px, py - wallHeight * view.s, wallTile * view.s + 1, wallHeight * view.s);
+  }
+  // Боковые стены, как их видно сверху: торцы брёвен.
+  const sideWidth = 1.4, sideTile = sideWidth * 3;
+  for (const x of [-width / 2 - sideWidth, width / 2]) for (let z = depth / 2; z > -depth / 2 - 1; z -= sideTile) {
+    const [px, py] = view.project(x, z);
+    ctx.drawImage(side, 210, 0, 610, side.naturalHeight, px, py, sideWidth * view.s, sideTile * SIN * view.s + 1);
+  }
 }
 
 function drawRoundGround(view, scene, game) {
@@ -363,21 +372,40 @@ function drawRoundGround(view, scene, game) {
 function addTavernProps(game, add) {
   const { view } = game;
   const scene = SCENES.tavern;
-  add(10.2, () => { view.box(0, 10.2, 3, 1, 1.4, '#59544d'); fire(view, 0, 9.8, 0.6, game.now); });
-  add(-3, () => view.box(-10.5, -3, 1.2, 7, 1.2, '#4d3320'));
-  add(-11, () => view.box(0, -11, 26, 0.5, 0.8, '#4d3320'));
-  for (const o of scene.obstacles.filter((o) => o.stool)) add(o.z, () => view.cylinder(o.x, o.z, 0.3, 0.5, '#4d3320'));
-  for (const [x, z] of scene.tables) add(z, () => {
-    view.cylinder(x, z, 0.9, 0.9, '#73502e');
-    candle(view, x + 0.2, z + 0.1, 0.9, game.now);
-  });
-  add(6.5, () => {
-    view.box(-10.5, 6.5, 2, 1.2, 1, '#4d3320');
-    view.blob(-10.9, 6.5, 1.15, 0.35, 0.35, 0.35, '#4dcc66');
-    view.blob(-10.2, 6.7, 1.15, 0.3, 0.3, 0.3, '#cc4d99');
-  });
-  add(3.5, () => view.box(10.5, 3.5, 1.2, 0.6, 0.9, '#333338'));
-  add(7, () => { view.box(11.5, 7, 2, 2, 1.6, '#4d403a'); fire(view, 11.5, 6.4, 0.5, game.now); });
+  /** Предмет стоит на полу: z — где его низ, height — высота в метрах. */
+  const prop = (name, x, z, height, flip = false, lift = 0) => add(z, () => drawSprite(view, `hut/${name}.png`, x, z, height, flip, lift));
+  // На дальней стене.
+  const wall = 10.95;
+  prop('door', 9.2, wall, 3.3);
+  prop('window', -8.4, wall, 1.9, false, 1.1);
+  prop('window', 5.8, wall, 1.9, false, 1.1);
+  prop('herbs', -11, wall, 1.3, false, 2.2);
+  prop('herbs', 3, wall, 1, true, 2.9);
+
+  // Печь, рядом с ней ступа Яги, прялка, зеркальце, ворон, кот и домовой в горшке.
+  prop('oven_fire', 0, 9.4, 5);
+  fireGlow(view, add, 0, 9.3, game.now);
+  prop('stupa', -3.6, 8.7, 2.5);
+  prop('spinning_wheel', -6.8, 8.7, 2.4);
+  prop('mirror', 4.2, 8.8, 1.8);
+  prop('raven', 6.4, 9.1, 1.9, true);
+  prop('cat_sleep', 2.9, 7.4, 0.8);
+  prop('domovoy_idle', -2.7, 7.4, 1.05);
+
+  // Угол знахарки: лавка с кувшинами живой и мёртвой воды.
+  prop('bench', -10.2, 7.4, 1.25);
+  add(7.3, () => drawSprite(view, 'hut/water_jugs.png', -10.2, 7.3, 1, false, 0.72));
+  // Кузня: горн и наковальня.
+  prop('forge_fire', 10.6, 7.5, 2.7);
+  prop('anvil', 10.6, 3, 1.7);
+  // Полати, сундуки и домовой с монетами.
+  prop('polati', -10, -3.8, 2.4);
+  prop('chest_open', 10.6, -6.4, 1.5);
+  prop('chest_closed', -10.8, -8.8, 1.3);
+  prop('domovoy', 8.3, -6.4, 1.15, true);
+
+  for (const o of scene.obstacles.filter((o) => o.stool)) prop('stool', o.x, o.z - 0.15, 0.75);
+  for (const [x, z] of scene.tables) prop('table_feast', x, z - 0.55, 1.75);
   for (const [z, x] of [[-6, -12.6], [0, -12.6], [6, -12.6], [-6, 12.6], [0, 12.6], [6, 12.6]]) add(z + 0.4, () => torch(view, x, z, game.now));
   // Знахарка и кузнец — рисованные, во весь рост.
   for (const id of ['healer', 'smith']) {
@@ -385,31 +413,51 @@ function addTavernProps(game, add) {
     add(npc.z, () => drawSprite(view, NPC_ART[id][0], npc.x, npc.z, NPC_ART[id][1], id === 'smith'));
   }
   // Стойки с оружием.
-  for (const item of scene.interactables.filter((i) => i.kind === 'rack')) add(item.z, () => {
-    view.box(item.x, item.z, 0.8, 0.8, 1, '#4d3320');
+  for (const item of scene.interactables.filter((i) => i.kind === 'rack')) {
+    prop('weapon_rack', item.x, item.z - 0.1, 2.3);
     const w = WEAPONS[item.weapon];
-    drawSprite(view, w.sprite, item.x, item.z - 0.1, w.height, false, 1 * 0.574 * 1.0 + 0.1);
+    // Висит на крюках справа от столба, иначе тёмное оружие сливается с ним.
+    add(item.z - 0.11, () => drawSprite(view, w.sprite, item.x + 0.3, item.z - 0.11, w.height * 1.25, false, 0.45));
+  }
+  // Круглый стол, на нём блюдечко с наливным яблочком: через него открывается карта.
+  prop('table_cloth', 0, 4.9, 1.9);
+  add(4.8, () => {
+    const image = assets.image('map/saucer.png');
+    if (!image?.naturalWidth) return;
+    const [px, py] = view.project(0, 5.2, 1.45), w = 1.25 * view.s, h = w * 0.62;
+    view.ctx.drawImage(image, px - w / 2, py - h / 2, w, h);
   });
-  // Стол с картой.
-  add(5.5, () => {
-    view.box(0, 5.5, 3.2, 2, 0.9, '#4d3320');
-    const ctx = view.ctx;
-    const [x0, y0] = view.project(-1.4, 6.3, 0.92), [x1, y1] = view.project(1.4, 4.7, 0.92);
-    ctx.fillStyle = '#d9bf8c'; ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
-    ctx.strokeStyle = 'rgba(90,60,30,0.6)'; ctx.lineWidth = view.s * 0.03;
-    ctx.beginPath(); ctx.moveTo(x0 + (x1 - x0) * 0.1, y0 + (y1 - y0) * 0.6); ctx.bezierCurveTo(x0 + (x1 - x0) * 0.4, y0, x0 + (x1 - x0) * 0.6, y1, x1 - (x1 - x0) * 0.1, y0 + (y1 - y0) * 0.4); ctx.stroke();
-    view.box(-0.8, 5.3, 0.22, 0.22, 0.22, '#80542e', 0.92);
-    candle(view, 1.3, 6.2, 0.93, game.now);
+  // Низкий передний край стены.
+  add(-11, () => {
+    const image = assets.image('hut/wall_back.jpg');
+    if (!image?.naturalWidth) return;
+    const [x0, y0] = view.project(-14.4, -11), [x1] = view.project(14.4, -11), height = 0.7 * view.s;
+    view.ctx.drawImage(image, 0, 0, image.naturalWidth, image.naturalHeight * 0.2, x0, y0 - height, x1 - x0, height);
+  });
+}
+
+/** Отсвет огня в устье печи. */
+function fireGlow(view, add, x, z, now) {
+  add(z - 0.05, () => {
+    const ctx = view.ctx, [px, py] = view.project(x, z, 1.5), r = view.s * (1.6 + Math.sin(now * 11) * 0.1);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const g = ctx.createRadialGradient(px, py, 0, px, py, r);
+    g.addColorStop(0, 'rgba(255,150,60,0.28)'); g.addColorStop(1, 'rgba(255,90,20,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
   });
 }
 
 function drawTavernLabels(game) {
   const { view } = game;
   const scene = SCENES.tavern;
-  view.label(0, 5.5, 2.2, 'Карта', '#ffd980', 0.45);
+  view.label(0, 5.2, 2.2, 'Блюдечко', '#ffd980', 0.45);
   for (const item of scene.interactables.filter((i) => i.kind === 'rack')) view.label(item.x, item.z, 2.4, WEAPONS[item.weapon].name, '#fff', 0.36);
   view.label(-9, 5, 2.5, 'Знахарка Милава', '#c9f5c0', 0.38);
   view.label(9, 5, 2.6, 'Кузнец Добромир', '#ffd2a6', 0.38);
+  view.label(8.3, -6.4, 1.6, 'Домовой', '#e9dcb0', 0.36);
 }
 
 function candle(view, x, z, y, now) {
