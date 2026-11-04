@@ -7,12 +7,18 @@ import { bogatyrPose } from './rig.js';
 import { ORB_LIFT, ORB_RADIUS } from './view.js';
 
 /** Толщина богатыря по глубине: снаряд, пролетевший дальше этого перед ним или за ним, не задевает. */
-const BODY_DEPTH = 0.45;
+const BODY_DEPTH = 0.35;
+/** Снаряд ранит, только если попал в тело: плащ, руки и оружие не в счёт, а сам снаряд считается меньше рисунка. */
+const BODY_SKIP = ['weapon', 'sheathed', 'cape', 'arm_front', 'arm_back', 'hand'], SHOT_RADIUS = ORB_RADIUS * 0.35;
+/** Лопата и гуси задевают ближе, чем нарисованы. Всадники — как есть. */
+const WIDE_FORGIVE = 0.7;
 
 const rotateY = (x, z, degrees) => {
   const a = degrees * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
   return [x * c + z * s, -x * s + z * c];
 };
+
+const isJumpable = (h) => h.type === 'proj' && !/^(rider|wing)/.test(h.look ?? '');
 
 export class LocalPlayer {
   constructor(game) {
@@ -457,18 +463,22 @@ export class LocalPlayer {
     for (const h of game.liveHazards()) {
       const key = h.key ?? String(h.id);
       if (this.processed.has(key)) continue;
-      if (this.touches(h)) touching.push({ ...h, key });
-    }
-    for (const h of touching) {
-      // Перекатом снаряд перепрыгивается. Всадника так не перепрыгнуть, остальное перекат не отменяет.
-      if (this.rolling && h.type === 'proj' && !/^(rider|wing)/.test(h.look ?? '')) {
-        if (this.jumpedRoll !== this.rollStart) {
-          this.jumpedRoll = this.rollStart;
-          game.vfx.text(this.x, this.z, 2.5, 'Мимо!', '#ffe9a8', 0.8);
-          game.send({ t: 'jumped' });
+      // Перекатом снаряд перепрыгивается, и ещё миг после приземления. Что пролетело рядом, уже не ранит и засчитывается.
+      // Всадника так не перепрыгнуть, остальное перекат не отменяет.
+      if (this.now < this.rollEnd + P.jumpGrace && isJumpable(h)) {
+        if (Math.hypot(h.x - this.x, h.z - this.z) < h.r + P.jumpReach) {
+          this.processed.set(key, this.now);
+          if (this.jumpedRoll !== this.rollStart) {
+            this.jumpedRoll = this.rollStart;
+            game.vfx.text(this.x, this.z, 2.5, 'Мимо!', '#ffe9a8', 0.8);
+            game.send({ t: 'jumped' });
+          }
         }
         continue;
       }
+      if (this.touches(h)) touching.push({ ...h, key });
+    }
+    for (const h of touching) {
       // Во время неуязвимости опасность не помечаем: если всё ещё касается — ударит позже.
       if (this.invulnerable) continue;
       if (this.blocking && h.block) { this.blockHit(h); continue; }
@@ -490,11 +500,12 @@ export class LocalPlayer {
    */
   touches(h) {
     if (h.type === 'fence') return Math.hypot(this.x, this.z) > h.R;
+    if (h.type === 'proj' && h.wide && isJumpable(h)) return Math.hypot(h.x - this.x, h.z - this.z) < (h.r + P.hurtRadius) * WIDE_FORGIVE;
     if (h.type !== 'proj' || h.wide) return Math.hypot(h.x - this.x, h.z - this.z) < h.r + P.hurtRadius;
     if (Math.abs(h.z - this.z) > BODY_DEPTH) return false;
     const avatar = this.game.avatars.get(this.me?.id);
     if (!avatar) return Math.hypot(h.x - this.x, h.z - this.z) < h.r + P.hurtRadius;
-    return avatar.rig.hits(h.x - this.x, (h.y ?? 1.2) * ORB_LIFT, ORB_RADIUS * 0.85, bogatyrPose(avatar));
+    return avatar.rig.hits(h.x - this.x, (h.y ?? 1.2) * ORB_LIFT, SHOT_RADIUS, bogatyrPose(avatar), BODY_SKIP);
   }
 
   forgetOldHazards() {
