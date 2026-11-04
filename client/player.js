@@ -27,7 +27,7 @@ export class LocalPlayer {
     this.lightIndex = 0; this.comboExpire = 0;
     this.buffered = null; this.bufferedAt = 0;
     this.pendingCards = 0;
-    this.parryUntil = 0; this.parryReadyAt = 0;
+    this.blocking = false; this.shield = P.blockStrength; this.shieldBroken = false;
     this.invulnerableUntil = 0; this.blinkUntil = 0;
     this.slipperyUntil = 0;
     this.processed = new Map();
@@ -46,10 +46,9 @@ export class LocalPlayer {
   /** Доля пройденного переката: 0..1 (0 — не катится). */
   get rollProgress() { return this.rolling ? (this.now - this.rollStart) / P.rollDuration : 0; }
   get stunned() { return this.now < this.stunnedUntil; }
-  get parrying() { return this.now < this.parryUntil; }
-  /** Насколько восстановились перекат и щит: от 0 до 1. */
+  /** Насколько восстановился перекат и цел щит: от 0 до 1. */
   get rollCharge() { return Math.min(1, 1 - (this.nextRoll - this.now) / (P.rollDuration + P.rollCooldown)); }
-  get shieldCharge() { return Math.min(1, 1 - (this.parryReadyAt - this.now) / (P.parryWindow + P.parryCooldown)); }
+  get shieldCharge() { return this.shield / P.blockStrength; }
   get invulnerable() {
     return this.now < this.invulnerableUntil || this.me?.downed || this.game.cutscene;
   }
@@ -104,6 +103,7 @@ export class LocalPlayer {
     if (me.dragged && (input.lightPressed || input.heavyPressed || input.dashPressed || input.interactPressed)) game.send({ t: 'struggle' });
 
     if (this.stunned) { this.vx = this.vz = 0; this.rollEnd = 0; }
+    this.updateBlock(dt, locked);
 
     // Движение.
     if (locked || me.downed || this.stunned) {
@@ -126,7 +126,7 @@ export class LocalPlayer {
         const l = Math.hypot(this.vx, this.vz);
         if (l > P.speed) { this.vx *= P.speed / l; this.vz *= P.speed / l; }
         const [mx, mz] = input.move;
-        const speed = this.attack ? P.speed * this.weapon.moveWhileAttacking : P.speed;
+        const speed = this.blocking ? P.speed * P.blockSpeed : this.attack ? P.speed * this.weapon.moveWhileAttacking : P.speed;
         this.accelerate(mx * speed, mz * speed, dt);
         if (!this.attack) this.setFacing(...this.aim());
       }
@@ -164,7 +164,7 @@ export class LocalPlayer {
       spin: !!this.attack?.step.spin,
       // Наклон прицела (градусы): лук и арбалет целятся вверх и вниз по экрану.
       aim: Math.round(Math.asin(Math.max(-1, Math.min(1, this.attack ? this.aimZ : this.fz))) * 57.3),
-      parry: this.parrying ? Math.round((this.parryUntil - this.now) * 100) / 100 : 0,
+      block: this.blocking,
       blink: this.now < this.blinkUntil ? Math.round((this.blinkUntil - this.now) * 100) / 100 : 0,
       stun: this.stunned,
       cine: this.game.boss?.cine?.actor === this.game.myId ? this.game.boss.cine.pose : null,
@@ -219,6 +219,9 @@ export class LocalPlayer {
       return;
     }
 
+    // Пока щит поднят, не бьём.
+    if (this.blocking) { this.buffered = null; return; }
+
     if (input.lightPressed) this.buffer(input.cardHeld ? ATTACK.CARD : ATTACK.LIGHT);
     if (input.heavyPressed) this.buffer(input.cardHeld ? ATTACK.ULTIMATE : ATTACK.HEAVY);
 
@@ -247,7 +250,7 @@ export class LocalPlayer {
       this.performHit();
       if (!this.attack) return;
     }
-    // После удара задержка: следующий начнётся, только когда кончится восстановление (отменить его могут перекат и парирование).
+    // После удара задержка: следующий начнётся, только когда кончится восстановление (отменить его могут перекат и блок).
     if (a.time < stepDuration(a.step)) return;
     // Удар за карту и ультимейт могут быть из нескольких шагов.
     const list = a.kind === ATTACK.CARD ? this.weapon.card : a.kind === ATTACK.ULTIMATE ? this.weapon.ultimate : null;
@@ -415,43 +418,60 @@ export class LocalPlayer {
 
   // ---------------------------------------------------------------- Защита
 
+  /** Щит поднят, пока держат кнопку. Опущенный восстанавливается, пробитый поднимется только полностью целым. */
+  updateBlock(dt, locked) {
+    const me = this.me;
+    this.blocking = this.game.input.blockHeld && !locked && !me.downed && !this.stunned && !this.rolling && !this.shieldBroken
+      && me.weapon !== null && this.attack?.kind !== ATTACK.ULTIMATE;
+    if (this.blocking) { if (this.attack) this.cancelAttack(); return; }
+    this.shield = Math.min(P.blockStrength, this.shield + P.blockRegen * dt);
+    if (this.shield >= P.blockStrength) this.shieldBroken = false;
+  }
+
+  /** Удар пришёлся в щит: урона нет, щит изнашивается. Последний удар щит тоже держит, но пробивается и богатырь на миг теряется. */
+  blockHit(h) {
+    const game = this.game;
+    this.shield -= Math.max(P.blockMinCost, (h.dmg ?? 0) * P.blockCostPerDamage);
+    this.shieldFlashUntil = this.now + 0.18;
+    game.vfx.guardFlash(this.x, this.z);
+    game.vfx.sparks(this.x, this.z, 10);
+    game.hitStop(0.06);
+    game.view.shake(0.14, 0.15, this.now);
+    playSound('block');
+    if (this.shield <= 0) {
+      this.shield = 0;
+      this.shieldBroken = true;
+      this.blocking = false;
+      this.stunnedUntil = this.now + P.blockBreakStun;
+      game.vfx.text(this.x, this.z, 2.6, 'Щит пробит!', '#ff6a50', 1.2);
+    }
+    if (h.repeat) { this.invulnerableUntil = this.now + 0.4; return; } // тело босса: повторно ударит не сразу, и карт за него нет
+    this.processed.set(h.key, this.now);
+    if (h.type === 'proj' && !h.keep) game.removeHazardLocally(h.id);
+    game.send({ t: 'blocked', hazard: h.id });
+  }
+
   updateDefense() {
     const game = this.game;
-    if (game.input.parryPressed && this.now >= this.parryReadyAt && !this.stunned && !game.dialogueOpen && this.attack?.kind !== ATTACK.ULTIMATE) {
-      this.parryUntil = this.now + P.parryWindow;
-      this.parryReadyAt = this.parryUntil + P.parryCooldown;
-      // Парирование, как и перекат, прерывает текущую атаку в любой фазе.
-      this.cancelAttack();
-    }
-
     const touching = [];
     for (const h of game.liveHazards()) {
       const key = h.key ?? String(h.id);
       if (this.processed.has(key)) continue;
       if (this.touches(h)) touching.push({ ...h, key });
     }
-    // Сначала парирование: успешное защищает и от обычного снаряда, задевшего в тот же момент.
-    if (this.parrying) {
-      for (const h of touching) {
-        if (!h.parry || this.processed.has(h.key)) continue;
-        this.processed.set(h.key, this.now);
-        this.invulnerableUntil = this.now + P.parryInvulnerability;
-        game.vfx.parryFlash(this.x, this.z);
-        game.vfx.sparks(this.x, this.z, 16);
-        this.shieldFlashUntil = this.now + 0.18;
-        // Парирование — главный момент: заметный стоп-кадр и тряска.
-        game.hitStop(0.13);
-        game.view.shake(0.28, 0.2, this.now);
-        playSound('parry');
-        game.vfx.text(this.x, this.z, 2.5, 'ПАРИРОВАНО!', '#ff59c7', 1.3);
-        game.removeHazardLocally(h.id);
-        game.send({ t: 'parried', hazard: h.id });
-      }
-    }
     for (const h of touching) {
-      if (this.processed.has(h.key)) continue;
+      // Перекатом снаряд перепрыгивается. Всадника так не перепрыгнуть, остальное перекат не отменяет.
+      if (this.rolling && h.type === 'proj' && !/^(rider|wing)/.test(h.look ?? '')) {
+        if (this.jumpedRoll !== this.rollStart) {
+          this.jumpedRoll = this.rollStart;
+          game.vfx.text(this.x, this.z, 2.5, 'Мимо!', '#ffe9a8', 0.8);
+          game.send({ t: 'jumped' });
+        }
+        continue;
+      }
       // Во время неуязвимости опасность не помечаем: если всё ещё касается — ударит позже.
       if (this.invulnerable) continue;
+      if (this.blocking && h.block) { this.blockHit(h); continue; }
       if (!h.repeat) this.processed.set(h.key, this.now);
       this.invulnerableUntil = this.now + P.hitInvulnerability;
       this.blinkUntil = this.now + P.hitInvulnerability;

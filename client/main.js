@@ -96,7 +96,7 @@ class Game {
         const me = this.me;
         if (me && me.cards !== this.lastCards) {
           // Набрались все карты — звук и вспышка у богатыря.
-          if (me.cards >= CARDS.max - 1e-3 && this.lastCards < CARDS.max - 1e-3) { blip('ready'); this.vfx.parryFlash(this.local.x, this.local.z); }
+          if (me.cards >= CARDS.max - 1e-3 && this.lastCards < CARDS.max - 1e-3) { blip('ready'); this.vfx.guardFlash(this.local.x, this.local.z); }
           this.lastCards = me.cards;
           this.local.onCardsChanged();
         }
@@ -130,7 +130,7 @@ class Game {
           this.vfx.text(this.local.x, this.local.z, 2.8, 'Руки скользкие!', '#cc80ff', 1.2);
         }
         break;
-      case 'parryFlash': this.vfx.parryFlash(m.x, m.z); playSound('parry', 0.6); break;
+      case 'blockFlash': this.vfx.guardFlash(m.x, m.z); playSound('block', 0.6); break;
       case 'hurtFlash': {
         const a = this.avatars.get(m.id);
         if (a) a.flashUntil = this.now + 0.12;
@@ -204,11 +204,11 @@ class Game {
     // Когти Лиха — опасность у его рук, пока идёт выпад или бег.
     const b = this.boss;
     // Тело Лиха ранит при столкновении (кроме укрытия и обессиленного); повторно — после неуязвимости.
-    if (b?.contact) list.push({ id: 'body', key: 'body', repeat: true, type: 'body', x: b.x, z: b.z, r: (b.radius ?? 0.55) + 0.2, dmg: b.contact });
+    if (b?.contact) list.push({ id: 'body', key: 'body', repeat: true, type: 'body', block: true, x: b.x, z: b.z, r: (b.radius ?? 0.55) + 0.2, dmg: b.contact });
     // Забор Яги ранит прижавшегося (с маслом для ворот — нет), бегущая избушка сбивает.
     if (b?.fenceR && this.me?.charm !== 'oil') list.push({ id: 'fence', key: 'fence', repeat: true, type: 'fence', R: b.fenceR, x: 0, z: 0, r: 0, dmg: 8 });
     if (b?.hut?.charging) list.push({ id: 'hutCharge', key: `hut:${b.hut.token}`, type: 'body', x: b.hut.x, z: b.hut.z, r: b.hut.r + 0.2, dmg: 20 });
-    if (b?.claws) list.push({ id: 'claws', key: `claws:${b.claws.token}`, type: 'claws', x: b.x + b.fx * 0.6, z: b.z + b.fz * 0.6, r: 1.3, dmg: b.claws.damage });
+    if (b?.claws) list.push({ id: 'claws', key: `claws:${b.claws.token}`, type: 'claws', block: true, x: b.x + b.fx * 0.6, z: b.z + b.fz * 0.6, r: 1.3, dmg: b.claws.damage });
     return list;
   }
 
@@ -443,7 +443,7 @@ play.disabled = false;
 play.onclick = async () => {
   play.disabled = true;
   unlockAudio();
-  loadSound('parry', 'audio/parry.mp3');
+  loadSound('block', 'audio/parry.mp3');
   game.startLocal();
 };
 if (new URLSearchParams(location.search).has('autojoin')) play.click();

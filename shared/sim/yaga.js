@@ -30,8 +30,6 @@ const P = {
 /** Позы, в которых Яга открыта для ударов (для Медвежьего когтя). */
 const VULNERABLE = new Set(['Stuck', 'Stunned', 'Tired', 'Exhausted']);
 
-/** Какие кости из пяти парируются (номера по порядку). */
-const BONE_PARRIES = [[2, 4], [1, 3], [4, 5], [1, 5]];
 
 /** Хитбокс Яги для стрел: половина ширины и глубина от её точки на земле (на земле и в воздухе). */
 const ARROW_BOX_WIDTH = 0.9, GROUND_ARROW_BOX = [-0.7, 2.1], AIR_ARROW_BOX = [0.3, 3.9];
@@ -142,7 +140,7 @@ export class Yaga {
     if (this.dead || this.cutscene) return;
     if (this.gateStrikeAt && now >= this.gateStrikeAt) {
       this.gateStrikeAt = 0;
-      game.spawnZone(gate.x, gate.z, P.gateRadius, 'strike', 0.15, P.gateDamage, 0, 'claws');
+      game.spawnZone(gate.x, gate.z, P.gateRadius, 'strike', 0.15, P.gateDamage, 0, 'claws', true);
     }
     if (now < this.nextGateAt) return;
     this.nextGateAt = now + P.gateEvery;
@@ -410,7 +408,7 @@ export class Yaga {
     this.pose = 'Hover';
   }
 
-  /** Череп на заборе у богатыря стреляет веером костей, среднюю можно парировать. */
+  /** Череп на заборе у богатыря стреляет веером костей. */
   *bones() {
     const target = this.pickTarget();
     if (!target) return;
@@ -418,13 +416,12 @@ export class Yaga {
     const a = Math.atan2(target.x, target.z) + rand(-0.5, 0.5);
     const sx = Math.sin(a) * P.fenceRadius, sz = Math.cos(a) * P.fenceRadius;
     const [dx, dz] = norm(target.x - sx, target.z - sz);
-    // Череп вспыхивает, и летят кости. Какие парируются, меняется от залпа к залпу: они светятся розовым.
+    // Череп вспыхивает, и летят кости.
     this.game.flash(sx, sz, 0.8);
     yield* this.wait(this.tele(0.7));
-    const parried = BONE_PARRIES[Math.floor(Math.random() * BONE_PARRIES.length)];
     for (let i = 0; i < 5; i++) {
       const [fx, fz] = rotate(dx, dz, (i - 2) * 11);
-      this.game.fireEnemy(sx, sz, fx, fz, P.boneSpeed * this.d.projectileSpeed, P.boneDamage, parried.includes(i + 1), 4, 1.2, 'bone');
+      this.game.fireEnemy(sx, sz, fx, fz, P.boneSpeed * this.d.projectileSpeed, P.boneDamage, 4, 1.2, 'bone');
     }
     yield* this.wait(0.4);
   }
@@ -545,13 +542,13 @@ export class Yaga {
     yield* this.wait(1.2 / this.d.attackSpeed);
   }
 
-  /** Клевок ногой: быстрый удар, его можно парировать. */
+  /** Клевок ногой: быстрый удар, его можно принять на щит. */
   *peck(target) {
     const hut = this.hut;
     const [dx, dz] = norm(target.x - hut.x, target.z - hut.z);
-    this.game.telegraphLine(hut.x, hut.z, dx, dz, P.peckRange + 1, 1.1, this.tele(0.4), 'parry');
+    this.game.telegraphLine(hut.x, hut.z, dx, dz, P.peckRange + 1, 1.1, this.tele(0.4));
     yield* this.wait(this.tele(0.4));
-    this.game.fireEnemy(hut.x + dx * 2, hut.z + dz * 2, dx, dz, 22, P.peckDamage, true, 0.3, 0.8, 'peck');
+    this.game.fireEnemy(hut.x + dx * 2, hut.z + dz * 2, dx, dz, 22, P.peckDamage, 0.3, 0.8, 'peck');
     yield* this.wait(0.4);
   }
 

@@ -1,7 +1,7 @@
 // Игра: общее для всех игроков состояние похода (как GameSession в Unity). Работает и в браузере
 // (одиночная игра), и на Node-сервере (кооп). Здесь решается: где мы (таверна, карта, арена), где избушка, какой босс и сложность, урон, карты, снаряды.
 // Богатырём управляет его игрок у себя в браузере и присылает позицию (отзывчиво, как Owner-режим в Unity);
-// попадания по себе он тоже определяет сам — так уклонение и парирование честны по тому, что он видит.
+// попадания по себе он тоже определяет сам — так уклонение и блок честны по тому, что он видит.
 import { WEAPONS, BOSSES, DIFFICULTIES, WORLDS, CARDS, PLAYER, SESSION, YAGA, ABILITIES, MAGIC, RANKS, RANK_S_PLUS, rateFight, attackStep, ATTACK, STATUS } from '../data.js';
 import { emptyProgress, totalPoints } from '../progress.js';
 import { SCENES, MAP, clampOnMap, nodeNear, nearestInteractable } from '../scenes.js';
@@ -140,14 +140,18 @@ export class Game {
         break;
 
       case 'hurt': this.hurt(player, m); break;
-      case 'parried': {
+      case 'blocked': {
         const hazard = this.hazards.find((h) => h.id === m.hazard);
-        if (hazard) this.removeHazard(hazard);
-        if (this.stats) this.stats.parries++;
-        this.addCards(player, CARDS.perParry);
-        this.broadcast({ t: 'parryFlash', id: player.id, x: player.x, z: player.z }, player);
+        if (hazard?.consume) this.removeHazard(hazard);
+        if (this.stats) this.stats.defended++;
+        this.addCards(player, CARDS.perBlock);
+        this.broadcast({ t: 'blockFlash', id: player.id, x: player.x, z: player.z }, player);
         break;
       }
+      case 'jumped':
+        if (this.stats) this.stats.defended++;
+        this.addCards(player, CARDS.perJump);
+        break;
       case 'stunned': this.floatText(player.x, player.z, 2.8, 'В капкане!', '#ffb34d', 1.3); break;
 
       case 'drop': // проклятие: оружие выскользнуло
@@ -157,10 +161,10 @@ export class Game {
       case 'pickup':
         if (player.dropped && Math.hypot(player.dropped[0] - player.x, player.dropped[1] - player.z) < 2) player.dropped = null;
         break;
-      case 'ricochet': { // стрела отрикошетила обратно в стрелка — её можно парировать
+      case 'ricochet': { // стрела отрикошетила обратно в стрелка
         const [dx, dz] = normalize(m.dx, m.dz);
         player.slipperyUntil = 0;
-        this.fireEnemy(m.x + dx * 3.5, m.z + dz * 3.5, -dx, -dz, 11, 12, true, 3, 1);
+        this.fireEnemy(m.x + dx * 3.5, m.z + dz * 3.5, -dx, -dz, 11, 12, 3, 1);
         break;
       }
 
@@ -433,7 +437,7 @@ export class Game {
   /** Широкий снаряд врага: всадник, лопата, гусь. Задевает кругом r, а не по очертаниям богатыря. */
   spawnWide(x, z, dx, dz, speed, r, damage, lifetime, look, extra = {}) {
     this.hazards.push({ id: this.nextId++, type: 'proj', wide: true, look, x, z, y: 1, vx: dx * speed, vz: dz * speed, r, damage,
-      parryable: false, consume: false, expire: this.clock.now + lifetime, ...extra });
+      consume: false, expire: this.clock.now + lifetime, ...extra });
   }
 
   /** Потащить богатыря к точке (лопата, гуси). need — сколько нажатий нужно, чтобы вырваться. */
@@ -593,7 +597,7 @@ export class Game {
       p.magicReadyAt = 0;
       p.beltUsed = false;
     }
-    this.stats = { start: this.clock.now, damageTaken: 0, parries: 0 };
+    this.stats = { start: this.clock.now, damageTaken: 0, defended: 0 };
     this.boss = entry.kind === 'likho' ? new Likho(this, d) : entry.kind === 'yaga' ? new Yaga(this, d) : new Dummy(this, d, entry.name);
     this.announce(`${entry.name} — ${d.name}`);
   }
@@ -673,11 +677,11 @@ export class Game {
     const nextWasLocked = !this.isWorldUnlocked(world + 1);
     if (this.difficulty > saved.results[boss]) saved.results[boss] = this.difficulty;
 
-    // Рейтинг: время, полученный урон, парирования, сложность. Очки прокачки по каждому боссу — по лучшему результату,
+    // Рейтинг: время, полученный урон, блоки и прыжки, сложность. Очки прокачки по каждому боссу — по лучшему результату,
     // монеты от трактирщика — за каждую победу.
-    const stats = this.stats ?? { start: this.clock.now, damageTaken: 0, parries: 0 };
+    const stats = this.stats ?? { start: this.clock.now, damageTaken: 0, defended: 0 };
     const time = this.clock.now - stats.start;
-    const rating = rateFight({ time, par: BOSSES[boss].par, damageTaken: stats.damageTaken, parries: stats.parries, difficulty: this.difficulty });
+    const rating = rateFight({ time, par: BOSSES[boss].par, damageTaken: stats.damageTaken, defended: stats.defended, difficulty: this.difficulty });
     const rank = RANKS[rating.rank];
     const curses = this.curses.size, cursePoints = Math.min(curses, rank.curses);
     const gained = Math.max(0, rank.points - saved.rankPoints[boss]) + Math.max(0, cursePoints - saved.cursePoints[boss]);
@@ -690,7 +694,7 @@ export class Game {
 
     this.result = {
       boss, difficulty: this.difficulty, rank: rating.rank, score: rating.score, parts: rating.parts,
-      time: Math.round(time), damageTaken: Math.round(stats.damageTaken), parries: stats.parries,
+      time: Math.round(time), damageTaken: Math.round(stats.damageTaken), defended: stats.defended,
       curses, cursePoints, rankPoints: rank.points, gained, coinsGained: rank.coins, firstStar, ...this.progressInfo(),
     };
     this.broadcast({ t: 'result', ...this.result });
@@ -729,7 +733,6 @@ export class Game {
     this.broadcast({ t: 'tele', id, shape: 'circle', x, z, r, duration, color });
     return id;
   }
-  /** color: 'danger' — красная полоса, 'parry' — розовая: эту атаку можно парировать. */
   telegraphLine(x, z, dx, dz, length, width, duration, color = 'danger') {
     const id = this.nextId++;
     this.broadcast({ t: 'tele', id, shape: 'line', x, z, dx, dz, length, width, duration, color });
@@ -756,18 +759,19 @@ export class Game {
     this.broadcast({ t: 'slippery', id: player.id, duration });
   }
 
-  spawnZone(x, z, r, kind, lifetime, damage, stun = 0, look = null) {
+  /** Удар по земле. Щитом можно закрыться только от удара когтями (look 'claws'), и то не от всякого: unblockable. */
+  spawnZone(x, z, r, kind, lifetime, damage, stun = 0, look = null, unblockable = false) {
     const radius = this.sceneData.bossRadius ?? 14;
     const d = Math.hypot(x, z);
     if (d > radius) { x *= radius / d; z *= radius / d; }
-    this.hazards.push({ id: this.nextId++, type: 'zone', kind, look, x, z, r, damage, stun,
+    this.hazards.push({ id: this.nextId++, type: 'zone', kind, look, x, z, r, damage, stun, block: kind === 'strike' && look === 'claws' && !unblockable,
       consume: kind === 'trap', expire: this.clock.now + lifetime });
     if (kind === 'strike') this.flash(x, z, r, look);
   }
 
-  fireEnemy(x, z, dx, dz, speed, damage, parryable, lifetime, y = null, look = null) {
+  fireEnemy(x, z, dx, dz, speed, damage, lifetime, y = null, look = null) {
     this.hazards.push({ id: this.nextId++, type: 'proj', look, x, z, y: y ?? (this.boss?.kind === 'likho' ? 2.2 : 1.2),
-      vx: dx * speed, vz: dz * speed, r: 0.35, damage, parryable, consume: true, expire: this.clock.now + lifetime });
+      vx: dx * speed, vz: dz * speed, r: 0.35, damage, consume: true, expire: this.clock.now + lifetime });
   }
 
   removeHazard(hazard) { this.hazards = this.hazards.filter((h) => h !== hazard); }
@@ -921,8 +925,8 @@ export class Game {
       decoy: this.activeDecoy() ? { x: r2(this.decoy.x), z: r2(this.decoy.z), owner: this.decoy.owner, left: r2(this.decoy.expire - now) } : null,
       boss: this.boss?.snapshot() ?? null,
       hazards: this.hazards.map((h) => h.type === 'proj'
-        ? { id: h.id, type: 'proj', look: h.look, wide: h.wide, x: r2(h.x), z: r2(h.z), y: h.y, vx: r2(h.vx), vz: r2(h.vz), r: h.r, parry: h.parryable, dmg: h.damage, keep: !h.consume }
-        : { id: h.id, type: 'zone', kind: h.kind, look: h.look, x: r2(h.x), z: r2(h.z), r: h.r, dmg: h.damage, stun: h.stun }),
+        ? { id: h.id, type: 'proj', look: h.look, wide: h.wide, x: r2(h.x), z: r2(h.z), y: h.y, vx: r2(h.vx), vz: r2(h.vz), r: h.r, block: true, dmg: h.damage, keep: !h.consume }
+        : { id: h.id, type: 'zone', kind: h.kind, look: h.look, x: r2(h.x), z: r2(h.z), r: h.r, block: h.block, dmg: h.damage, stun: h.stun }),
       arrows: this.projectiles.map((p) => ({ id: p.id, x: r2(p.x), z: r2(p.z), vx: r2(p.vx), vz: r2(p.vz), big: p.big, burn: p.effect === 'burn' })),
     };
   }

@@ -120,7 +120,7 @@ export class Hud {
     const rows = [
       ['Время', `${minutes}:${seconds}`, m.parts.time, 40],
       ['Получено урона', m.damageTaken, m.parts.damage, 40],
-      ['Отбито щитом', m.parries, m.parts.parries, 20],
+      ['Блоки и прыжки', m.defended, m.parts.defense, 20],
       ['Сложность', DIFFICULTIES[m.difficulty].name, m.difficulty >= 1 ? 10 : 0, 10],
     ];
     $('result-table').innerHTML = rows.map(([name, value, score, max]) =>
@@ -300,7 +300,7 @@ export class Hud {
     const move = ['up', 'left', 'down', 'right'].map(k).join('');
     $('hint').textContent = onMap
       ? (game.session.stoneOpen ? `1 / 2 — выбрать сложность     ${k('back')} — отойти` : `${move} — бежать избушкой     ${k('interact')} — в бой у логова     ${k('back')} — отойти от карты`)
-      : `${k('light')}/${k('heavy')} — атаки   ${k('card')} + атака — карта и ультимейт   ${k('dash')} — перекат   ${k('parry')} — щит   ${k('ability')}/${k('magic')} — способность и магия   ${k('interact')} — действие   ${k('help')} — управление`;
+      : `${k('light')}/${k('heavy')} — атаки   ${k('card')} + атака — карта и ультимейт   ${k('dash')} — перекат   ${k('block')} — блок (держать)   ${k('ability')}/${k('magic')} — способность и магия   ${k('interact')} — действие   ${k('help')} — управление`;
   }
 
   updateMap(onMap) {

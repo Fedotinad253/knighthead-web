@@ -1,5 +1,5 @@
 // Эффекты на земле и над головами: подсказки атак (красные круги и полосы, тень сука), вспышки ударов,
-// дуги взмахов, кольцо парирования, всплывающий текст и цифры урона.
+// дуги взмахов, вспышка блока, всплывающий текст и цифры урона.
 import { SIN } from './view.js';
 import { assets } from './assets.js';
 
@@ -52,7 +52,7 @@ export class Vfx {
   }
   /** Кольцо-волна от сильного удара. */
   shock(x, z, r) { this.add({ kind: 'shock', x, z, r, until: this.now + 0.3 }); }
-  parryFlash(x, z) { this.add({ kind: 'parry', x, z, until: this.now + 0.35 }); }
+  guardFlash(x, z) { this.add({ kind: 'guard', x, z, until: this.now + 0.35 }); }
   text(x, z, y, text, color = '#fff', duration = 1.2) { this.add({ kind: 'text', x, z, y, text, color, until: this.now + duration, duration }); }
   /** Кольцо на земле, сжимающееся к центру (rgb — «r,g,b»): прицел искры, морок, живая вода. */
   ring(x, z, r, duration, rgb) { this.add({ kind: 'ring', x, z, r, rgb, until: this.now + Math.max(0.2, duration) }); }
@@ -98,19 +98,19 @@ export class Vfx {
     }
   }
 
-  /** Текст и вспышки парирования — поверх всего. */
+  /** Текст и вспышки блока — поверх всего. */
   drawTop(view) {
     const ctx = view.ctx;
     for (const i of this.items) {
       const t = Math.min(1, (this.now - i.born) / Math.max(0.01, i.until - i.born));
-      if (i.kind === 'parry') {
+      if (i.kind === 'guard') {
         const [px, py] = view.project(i.x, i.z, 1.6);
         const r = view.s * (0.6 + t * 1.8);
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
         const g = ctx.createRadialGradient(px, py, 0, px, py, r);
-        g.addColorStop(0, `rgba(255,140,220,${0.9 * (1 - t)})`);
-        g.addColorStop(1, 'rgba(255,90,200,0)');
+        g.addColorStop(0, `rgba(255,225,150,${0.9 * (1 - t)})`);
+        g.addColorStop(1, 'rgba(255,190,80,0)');
         ctx.fillStyle = g;
         ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
@@ -176,8 +176,7 @@ function drawLine(view, i, t) {
     ctx.fillStyle = fill; ctx.fill();
     if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = view.s * 0.05; ctx.stroke(); }
   };
-  // Парируемая атака — розовая, остальные — красные.
-  const [fill, edge] = i.color === 'parry' ? ['255,89,199', '255,120,215'] : ['255,60,30', '255,80,40'];
+  const [fill, edge] = ['255,60,30', '255,80,40'];
   poly(corners(i.length), `rgba(${fill},0.16)`, `rgba(${edge},0.85)`);
   poly(corners(i.length * t), `rgba(${fill},0.38)`);
 }
@@ -223,12 +222,12 @@ export function shieldPath(ctx, h) {
   ctx.closePath();
 }
 
-/** Щит в руке богатыря. glow — розовое свечение (то же, что у парируемых атак), flash — белая вспышка от отражённого удара. */
+/** Щит в руке богатыря. glow — тёплое свечение, flash — белая вспышка от отражённого удара. */
 export function drawShield(ctx, px, py, h, { alpha = 1, glow = 1, flash = 0 } = {}) {
   ctx.save();
   ctx.translate(px, py);
   ctx.globalAlpha = alpha;
-  ctx.shadowColor = 'rgba(255,90,200,0.95)';
+  ctx.shadowColor = 'rgba(255,200,110,0.9)';
   ctx.shadowBlur = h * 0.45 * glow;
   shieldPath(ctx, h);
   ctx.fillStyle = '#8f2a20';

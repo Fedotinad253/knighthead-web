@@ -296,13 +296,6 @@ export function drawWideProjectile(view, h, now, me) {
     const [path, width] = THROWN[h.look] ?? THROWN.bone;
     const [px, py] = view.project(h.x, h.z, (h.y ?? 1) * 0.75);
     view.groundEllipse(h.x, h.z, 0.3, 0.22, 'rgba(0,0,0,0.3)');
-    // Парируемый снаряд светится розовым.
-    if (h.parry) {
-      const g = ctx.createRadialGradient(px, py, s * 0.1, px, py, s * 0.9);
-      g.addColorStop(0, 'rgba(255,89,199,0.85)'); g.addColorStop(1, 'rgba(255,89,199,0)');
-      ctx.fillStyle = g;
-      ctx.beginPath(); ctx.arc(px, py, s * 0.9, 0, Math.PI * 2); ctx.fill();
-    }
     drawFlat(view, path, px, py, width, now * 7 + h.id);
   }
 }

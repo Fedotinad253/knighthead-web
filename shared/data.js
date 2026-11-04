@@ -109,8 +109,8 @@ export const STATUS = {
   stun: { duration: 2, immunity: 8 },
 };
 
-/** Карты (аналог super-карт Cuphead): заполняются уроном и парированием. Удар за карту стоит одну, ультимейт — все. */
-export const CARDS = { max: 5, damagePerCard: 150, perParry: 1 };
+/** Карты (аналог super-карт Cuphead): заполняются уроном, блоком и прыжком через снаряд. Удар за карту стоит одну, ультимейт — все. */
+export const CARDS = { max: 5, damagePerCard: 100, perBlock: 0.25, perJump: 0.25 };
 
 export const WORLDS = [
   { name: 'Явь', color: '#f2cc4d', ground: '#5c8040' },
@@ -232,29 +232,30 @@ export const RANKS = [
 export const RANK_S_PLUS = 5;
 
 /**
- * Оценка боя 0–100: время (40), полученный урон (40), парирования (20), и тяжёлая сложность добавляет 10.
+ * Оценка боя 0–100: время (40), полученный урон (40), блоки и прыжки через снаряды (20), и тяжёлая сложность добавляет 10.
  * S+ — тяжёлая сложность и S без этой добавки.
  */
-export function rateFight({ time, par, damageTaken, parries, difficulty }) {
+export function rateFight({ time, par, damageTaken, defended, difficulty }) {
   const timeScore = 40 * Math.min(1, Math.max(0, (par * 2.5 - time) / (par * 1.5)));
   const damageScore = 40 * Math.max(0, 1 - damageTaken / PLAYER.maxHealth);
-  const parryScore = 20 * Math.min(1, parries / 5);
-  const base = timeScore + damageScore + parryScore;
+  const defenseScore = 20 * Math.min(1, defended / 10);
+  const base = timeScore + damageScore + defenseScore;
   const score = Math.min(100, base + (difficulty >= 1 ? 10 : 0));
   let rank = 0;
   for (let i = 0; i < RANK_S_PLUS; i++) if (score >= RANKS[i].min) rank = i;
   if (difficulty >= 1 && base >= RANKS[4].min) rank = RANK_S_PLUS;
-  return { rank, score: Math.round(score), parts: { time: Math.round(timeScore), damage: Math.round(damageScore), parries: Math.round(parryScore) } };
+  return { rank, score: Math.round(score), parts: { time: Math.round(timeScore), damage: Math.round(damageScore), defense: Math.round(defenseScore) } };
 }
 
 /**
- * Богатырь: движение как в Enter the Gungeon, перекат без выносливости, парирование на V.
- * Перекат — только перемещение: снаряды через него не перепрыгнуть (защита — уклониться или парировать).
+ * Богатырь: движение как в Enter the Gungeon, перекат без выносливости, блок щитом на V (удерживать).
+ * Перекатом можно перепрыгнуть снаряд, от остального он не спасает. Щит держит любой удар, кроме ударов по области,
+ * но каждый удар его изнашивает: пробитый щит встаёт только после полного восстановления.
  */
 export const PLAYER = {
   speed: 5.5, acceleration: 65, deceleration: 85,
   rollDistance: 3.2, rollDuration: 0.42, rollCooldown: 0.15,
-  parryWindow: 1, parryCooldown: 0.4, parryInvulnerability: 0.5,
+  blockStrength: 100, blockCostPerDamage: 2.5, blockMinCost: 15, blockRegen: 30, blockSpeed: 0.45, blockBreakStun: 0.6,
   hurtRadius: 0.45, hitInvulnerability: 1, blinkRate: 6, blinkBrightness: 0.55,
   radius: 0.4, maxHealth: 100,
   reviveRadius: 2.2, reviveDuration: 2, reviveHealth: 0.5,
@@ -262,7 +263,6 @@ export const PLAYER = {
 };
 
 export const PLAYER_COLORS = ['#d9402e', '#3f73e6'];
-export const PARRY_COLOR = '#ff59c7';
 export const DANGER_COLOR = '#ff8c26';
 
 export const SESSION = { TAVERN: 'tavern', MAP: 'map', ARENA: 'arena' };

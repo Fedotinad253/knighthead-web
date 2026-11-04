@@ -1,5 +1,5 @@
 // Чучело-заглушка: играет роль боссов, у которых ещё нет своей реализации (перенесено из TrainingDummy.cs).
-// Стреляет обычными и парируемыми (розовыми) снарядами, учитывает сложность, на половине здоровья злится.
+// Стреляет снарядами, учитывает сложность, на половине здоровья злится.
 import { Tasks } from './tasks.js';
 import { Health } from './health.js';
 
@@ -71,22 +71,22 @@ export class Dummy {
     const patterns = this.d.extra ? 4 : 3;
     let pattern = this.pattern++ % patterns;
     if (this.d.trimmed && pattern === 1) pattern = 2;
-    const fire = (dx, dz, speed, parry) => this.game.fireEnemy(this.x, this.z, dx, dz, speed, 15, parry, 6);
+    const fire = (dx, dz, speed) => this.game.fireEnemy(this.x, this.z, dx, dz, speed, 15, 6);
 
     if (pattern === 0) {
       const half = this.d.extra ? 2 : 1;
-      for (let i = -half; i <= half; i++) fire(...rotate(ax, az, i * 15), this.speed, false);
+      for (let i = -half; i <= half; i++) fire(...rotate(ax, az, i * 15), this.speed);
     } else if (pattern === 1) {
-      for (let i = 0; i < 16; i++) fire(...rotate(0, 1, i * 22.5), this.speed * 0.7, i % 4 === 0);
+      for (let i = 0; i < 16; i++) fire(...rotate(0, 1, i * 22.5), this.speed * 0.7);
     } else if (pattern === 2) {
-      fire(ax, az, this.speed * 0.6, true);
+      fire(ax, az, this.speed * 0.6);
     } else {
       const self = this;
       this.tasks.start((function* () {
         let angle = Math.random() * 360;
         for (let i = 0; i < 18; i++) {
           if (self.health.depleted) return;
-          fire(...rotate(0, 1, angle), self.speed * 0.8, i % 6 === 5);
+          fire(...rotate(0, 1, angle), self.speed * 0.8);
           angle += 25;
           yield 0.05;
         }

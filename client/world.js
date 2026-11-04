@@ -1,6 +1,6 @@
 // Рисование сцен (таверна, ночной лес, арена) и всех, кто в них: богатыри, боссы, снаряды, капканы.
 // Порядок — от дальнего к ближнему (больший Z — дальше), как в 3D.
-import { WEAPONS, WORLDS, BOSSES, PLAYER, SESSION } from '../shared/data.js';
+import { WEAPONS, WORLDS, BOSSES, SESSION } from '../shared/data.js';
 import { SCENES } from '../shared/scenes.js';
 import { assets } from './assets.js';
 import { shade, SIN, ORB_LIFT, ORB_RADIUS } from './view.js';
@@ -232,7 +232,8 @@ function drawCooldowns(game) {
     for (const x of [-r * 0.42, r * 0.08]) { ctx.moveTo(x, -r * 0.42); ctx.lineTo(x + r * 0.34, 0); ctx.lineTo(x, r * 0.42); }
     ctx.stroke();
   });
-  pip('shield', px + r * 1.35, local.shieldCharge, '#ff7ad1', (color) => {
+  // У щита дуга показывает его прочность; пробитый краснеет, пока не восстановится.
+  pip('shield', px + r * 1.35, local.shieldCharge, local.shieldBroken ? '#ff6a50' : '#8fc7ff', (color) => {
     shieldPath(ctx, r * 1.25);
     ctx.fillStyle = color;
     ctx.fill();
@@ -289,7 +290,7 @@ function drawBossStatus(game) {
 /** Отладка: зоны урона (красные), тело босса (жёлтое), сам богатырь (зелёный). */
 function drawHitboxes(game) {
   const { view } = game;
-  for (const h of game.liveHazards()) view.groundEllipse(h.x, h.z, h.r, h.r, null, h.parry ? '#ff59c7' : '#ff3b2f', 0.05);
+  for (const h of game.liveHazards()) view.groundEllipse(h.x, h.z, h.r, h.r, null, h.block ? '#8fc7ff' : '#ff3b2f', 0.05);
   if (game.boss) view.groundEllipse(game.boss.x, game.boss.z, game.boss.radius, game.boss.radius, null, '#ffd94d', 0.05);
   // Яга: полоса, куда попадают стрелы. Избушка: только ноги.
   const arrowBox = game.boss?.arrowBox;
@@ -515,13 +516,13 @@ function drawPlayer(game, p) {
     overlayAlpha: flash ? 0.7 : blink ? 0.45 : p.downed ? 0.35 : 0,
   });
   if (p.anim?.cine?.startsWith('awl')) drawAwl(game, p, base);
-  if (p.anim?.parry > 0) {
-    // Щит: быстро вскидывается, к концу окна угасает свечение.
-    const left = p.anim.parry, age = PLAYER.parryWindow - left;
-    const rise = Math.min(1, age / 0.09), size = view.s * 0.95 * (0.7 + 0.3 * rise + 0.12 * Math.sin(rise * Math.PI));
+  // Щит вскидывается быстро и так же быстро опускается.
+  p.shieldLift = (p.shieldLift ?? 0) + ((p.anim?.block ? 1 : 0) - (p.shieldLift ?? 0)) * 0.35;
+  if (p.shieldLift > 0.03) {
+    const size = view.s * 0.95 * (0.7 + 0.3 * p.shieldLift);
     const [sx, sy] = view.project(p.x + (p.flip ? -0.42 : 0.42), p.z, 1.05);
     const flashLeft = p.id === game.myId ? (game.local.shieldFlashUntil ?? 0) - game.now : 0;
-    drawShield(ctx, sx, sy, size, { alpha: Math.min(1, left / 0.12), glow: Math.min(1, left / PLAYER.parryWindow + 0.25), flash: Math.max(0, flashLeft / 0.18) });
+    drawShield(ctx, sx, sy, size, { alpha: Math.min(1, p.shieldLift * 2), glow: 0.5, flash: Math.max(0, flashLeft / 0.18) });
   }
   if (p.anim?.stun) drawStars(view, p.x, p.z, 2.4, game.now);
 }
@@ -608,7 +609,7 @@ function drawOrb(view, h, now) {
   const [px, py] = view.project(h.x, h.z, 0);
   const y = py - (h.y ?? 1.2) * view.s * ORB_LIFT;
   const r = ORB_RADIUS * view.s * (1 + Math.sin(now * 20 + h.id) * 0.06);
-  const color = h.parry ? [255, 89, 199] : [255, 140, 38];
+  const color = [255, 140, 38];
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
   const g = ctx.createRadialGradient(px, y, r * 0.5, px, y, r * 1.25);
@@ -616,7 +617,7 @@ function drawOrb(view, h, now) {
   ctx.fillStyle = g;
   ctx.beginPath(); ctx.arc(px, y, r * 1.25, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
-  ctx.fillStyle = h.parry ? '#ffb3e6' : '#ffd099';
+  ctx.fillStyle = '#ffd099';
   ctx.beginPath(); ctx.arc(px, y, r * 0.75, 0, Math.PI * 2); ctx.fill();
 }
 

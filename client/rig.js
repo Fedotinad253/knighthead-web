@@ -2,7 +2,7 @@
 // детали — картинки на них. Координаты скелета — пиксели исходного арта, Y вверх; поворот против часовой — плюс.
 // Персонаж нарисован смотрящим вправо; влево — отражается целиком.
 import { assets } from './assets.js';
-import { weaponStyle, attackPose, PARRY_POSE, STOW_POSE, CINE_POSES } from './weaponanim.js';
+import { weaponStyle, attackPose, BLOCK_POSE, STOW_POSE, CINE_POSES } from './weaponanim.js';
 
 // ---------------------------------------------------------------- Аффинные матрицы [a, b, c, d, e, f]
 
@@ -292,10 +292,10 @@ export class BogatyrAnimator {
   resort() { this.rig.order = this.rig.nodes.filter((n) => n.image).sort((a, b) => b.worldZ - a.worldZ); }
 
   update(dt, speed, now, anim = {}) {
-    const k = this.rig.k, roll = anim.roll ?? 0, atk = anim.atk ?? null, parry = anim.parry > 0;
-    // Удар или парирование — оружие в руке; потом подержит и уберёт за спину.
+    const k = this.rig.k, roll = anim.roll ?? 0, atk = anim.atk ?? null, block = !!anim.block;
+    // Удар или блок — оружие в руке; потом подержит и уберёт за спину.
     const cine = anim.cine ? CINE_POSES[anim.cine] : null;
-    const fighting = atk || parry || cine;
+    const fighting = atk || block || cine;
     // В кат-сцене оружие за спиной, в руке другое (см. drawAwl).
     if (cine) { this.inHand = false; this.stowUntil = -1; }
     else if (fighting) { this.heldUntil = now + WEAPON_HOLD; this.stowUntil = -1; this.inHand = true; }
@@ -325,13 +325,13 @@ export class BogatyrAnimator {
     this.rig.pose('leg_front', step * 5, 0, Math.max(0, step) * lift);
     this.rig.pose('leg_back', -step * 5, 0, Math.max(0, -step) * lift);
 
-    // К какой позе идём: удар, парирование, стойка с оружием, убирает за спину или просто шагает.
+    // К какой позе идём: удар, блок, стойка с оружием, убирает за спину или просто шагает.
     const style = this.style;
     const aim = style.aims && this.inHand ? (anim.aim ?? 0) * 0.6 : 0;
     let target;
     if (cine) target = cine;
     else if (atk) target = attackPose(style, atk[1], atk[2], atk[0]);
-    else if (parry) target = PARRY_POSE;
+    else if (block) target = BLOCK_POSE;
     else if (this.stowUntil >= 0) target = STOW_POSE;
     else if (this.inHand) target = style.ready;
     else target = { a: 0, b: this.current.b, t: 0, back: 0 };

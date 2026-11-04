@@ -6,7 +6,7 @@ const STORAGE = 'knighthead.bindings';
 export const ACTIONS = [
   ['up', 'Вверх'], ['down', 'Вниз'], ['left', 'Влево'], ['right', 'Вправо'],
   ['light', 'Лёгкая атака'], ['heavy', 'Тяжёлая атака'], ['card', 'Карта (удерживать)'],
-  ['dash', 'Перекат'], ['parry', 'Щит'], ['ability', 'Бытовая способность'], ['magic', 'Магия'], ['interact', 'Взаимодействие'],
+  ['dash', 'Перекат'], ['block', 'Блок (удерживать)'], ['ability', 'Бытовая способность'], ['magic', 'Магия'], ['interact', 'Взаимодействие'],
   ['back', 'Назад'], ['help', 'Управление'], ['debug', 'Отладка'],
 ];
 
@@ -17,7 +17,7 @@ const MODIFIERS = ['AltLeft', 'AltRight', 'MetaLeft', 'MetaRight'];
 export const DEFAULT_BINDINGS = {
   up: ['KeyW', 'ArrowUp'], down: ['KeyS', 'ArrowDown'], left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'],
   light: ['Mouse0'], heavy: ['Mouse2'], card: ['ShiftLeft', 'ShiftRight'],
-  dash: ['Space'], parry: ['KeyV'], ability: ['KeyQ'], magic: ['KeyE'], interact: ['KeyF'],
+  dash: ['Space'], block: ['KeyV'], ability: ['KeyQ'], magic: ['KeyE'], interact: ['KeyF'],
   back: ['Escape', 'Backspace'], help: ['F1'], debug: ['F3', 'Backquote'],
 };
 
@@ -137,7 +137,7 @@ export class Input {
   get heavyPressed() { return this.hit('heavy'); }
   get cardHeld() { return this.held('card'); }
   get dashPressed() { return this.hit('dash'); }
-  get parryPressed() { return this.hit('parry'); }
+  get blockHeld() { return this.held('block'); }
   get abilityPressed() { return this.hit('ability'); }
   get magicPressed() { return this.hit('magic'); }
   get interactPressed() { return this.hit('interact'); }
