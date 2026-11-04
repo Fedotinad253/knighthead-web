@@ -143,9 +143,11 @@ export class Game {
       case 'blocked': {
         const hazard = this.hazards.find((h) => h.id === m.hazard);
         if (hazard?.consume) this.removeHazard(hazard);
-        if (m.hazard === 'claws') this.boss?.onDashBlocked?.();
+        if (m.hazard === 'claws') this.boss?.onDashBlocked?.(!!m.perfect);
+        // Идеальный блок удара вблизи ненадолго оглушает босса.
+        if (m.perfect && (m.hazard === 'claws' || hazard?.type === 'zone')) this.perfectStun();
         if (this.stats) this.stats.defended++;
-        this.addCards(player, CARDS.perBlock);
+        this.addCards(player, m.perfect ? CARDS.perPerfect : CARDS.perBlock);
         this.broadcast({ t: 'blockFlash', id: player.id, x: player.x, z: player.z }, player);
         break;
       }
@@ -344,6 +346,18 @@ export class Game {
       if (boss.hut) { boss.hut.charging = false; boss.hut.moving = false; }
       this.floatText(boss.x, boss.z, 3.2, 'Оглушён!', '#ffd94d', 1);
     }
+  }
+
+  /** Оглушение от идеального блока. Иммунитета после себя не оставляет: его заслужили точным нажатием. */
+  perfectStun() {
+    const boss = this.boss, now = this.clock.now;
+    if (!boss || boss.dead || boss.cutscene || boss.transition) return;
+    const status = this.bossStatus ??= {};
+    status.stunUntil = Math.max(status.stunUntil ?? 0, now + STATUS.perfectStun);
+    boss.clawsOff?.();
+    if (boss.hut) { boss.hut.charging = false; boss.hut.moving = false; }
+    // Пока стоит оглушённый, тело не ранит.
+    if ('harmlessUntil' in boss) boss.harmlessUntil = Math.max(boss.harmlessUntil, now + STATUS.perfectStun + 0.5);
   }
 
   /** Такты кровотечения и огня: урон идёт по тому, на кого их наложили, по самому боссу или по его избушке. */

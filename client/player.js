@@ -33,7 +33,7 @@ export class LocalPlayer {
     this.lightIndex = 0; this.comboExpire = 0;
     this.buffered = null; this.bufferedAt = 0;
     this.pendingCards = 0;
-    this.blocking = false; this.shield = P.blockStrength; this.shieldBroken = false;
+    this.blocking = false; this.shield = P.blockStrength; this.shieldBroken = false; this.perfectUntil = 0; this.perfectReadyAt = 0;
     this.invulnerableUntil = 0; this.blinkUntil = 0;
     this.slipperyUntil = 0;
     this.processed = new Map();
@@ -428,9 +428,19 @@ export class LocalPlayer {
   /** Щит поднят, пока держат кнопку. Опущенный восстанавливается, пробитый поднимется только полностью целым. */
   updateBlock(dt, locked) {
     const me = this.me;
+    const wasBlocking = this.blocking;
     this.blocking = this.game.input.blockHeld && !locked && !me.downed && !this.stunned && !this.rolling && !this.shieldBroken
       && me.weapon !== null && this.attack?.kind !== ATTACK.ULTIMATE;
-    if (this.blocking) { if (this.attack) this.cancelAttack(); return; }
+    if (this.blocking) {
+      if (this.attack) this.cancelAttack();
+      // Щит поднят только что — удар в это окно идеальный. Частые нажатия окна не дают.
+      if (!wasBlocking) {
+        if (this.now >= this.perfectReadyAt) this.perfectUntil = this.now + P.perfectWindow;
+        this.perfectReadyAt = this.now + P.perfectLockout;
+      }
+      return;
+    }
+    this.perfectUntil = 0;
     this.shield = Math.min(P.blockStrength, this.shield + (this.shieldBroken ? P.blockBrokenRegen : P.blockRegen) * dt);
     if (this.shield >= P.blockStrength) this.shieldBroken = false;
   }
@@ -447,20 +457,25 @@ export class LocalPlayer {
   /** Удар пришёлся в щит: урона нет, щит изнашивается. Последний удар щит тоже держит, но пробивается и богатырь на миг теряется. */
   blockHit(h) {
     const game = this.game;
-    this.shield -= Math.max(P.blockMinCost, (h.dmg ?? 0) * P.blockCostPerDamage);
+    // Идеальный блок: щит поднят в самый момент удара, прочность не тратится.
+    const perfect = !h.repeat && this.now < this.perfectUntil;
+    if (perfect) {
+      game.vfx.text(this.x, this.z, 2.7, 'Идеально!', '#ffe9a8', 1);
+      game.flashScreen('255,240,200', 0.25, 0.15);
+    } else this.shield -= Math.max(P.blockMinCost, (h.dmg ?? 0) * P.blockCostPerDamage);
     this.shieldFlashUntil = this.now + 0.18;
     game.vfx.guardFlash(this.x, this.z);
     game.vfx.sparks(this.x, this.z, 10);
     // Рывок босса в щит ощущается сильнее обычного удара.
     const dash = h.type === 'claws';
-    game.hitStop(dash ? 0.14 : 0.06);
-    game.view.shake(dash ? 0.32 : 0.14, 0.15, this.now);
+    game.hitStop(perfect ? 0.18 : dash ? 0.14 : 0.06);
+    game.view.shake(perfect || dash ? 0.32 : 0.14, 0.15, this.now);
     playSound('block');
     if (this.shield <= 0) this.breakShield();
     if (h.repeat) { this.invulnerableUntil = this.now + 0.4; return; } // тело босса: повторно ударит не сразу, и карт за него нет
     this.processed.set(h.key, this.now);
     if (h.type === 'proj' && !h.keep) game.removeHazardLocally(h.id);
-    game.send({ t: 'blocked', hazard: h.id });
+    game.send({ t: 'blocked', hazard: h.id, perfect });
   }
 
   updateDefense() {

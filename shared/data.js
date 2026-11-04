@@ -107,10 +107,11 @@ export const STATUS = {
   bleed: { duration: 6, tick: 0.5, damage: 7, maxStacks: 3 },
   burn: { duration: 5, tick: 0.5, damage: 10 },
   stun: { duration: 2, immunity: 8 },
+  perfectStun: 1,
 };
 
 /** Карты (аналог super-карт Cuphead): заполняются уроном, блоком и прыжком через снаряд. Удар за карту стоит одну, ультимейт — все. */
-export const CARDS = { max: 5, damagePerCard: 100, perBlock: 0.25, perJump: 0.25 };
+export const CARDS = { max: 5, damagePerCard: 100, perBlock: 0.25, perPerfect: 0.5, perJump: 0.25 };
 
 export const WORLDS = [
   { name: 'Явь', color: '#f2cc4d', ground: '#5c8040' },
@@ -256,7 +257,7 @@ export const PLAYER = {
   speed: 5.5, acceleration: 65, deceleration: 85,
   rollDistance: 3.2, rollDuration: 0.42, rollCooldown: 0.15,
   blockStrength: 100, blockCostPerDamage: 2.5, blockMinCost: 15, blockRegen: 30, blockBrokenRegen: 12, blockSpeed: 0.45, blockBreakStun: 0.6,
-  jumpGrace: 0.15, jumpReach: 0.5, hurtRadius: 0.45, hitInvulnerability: 1, blinkRate: 6, blinkBrightness: 0.55,
+  perfectWindow: 0.22, perfectLockout: 0.5, jumpGrace: 0.15, jumpReach: 0.5, hurtRadius: 0.45, hitInvulnerability: 1, blinkRate: 6, blinkBrightness: 0.55,
   radius: 0.4, maxHealth: 100,
   reviveRadius: 2.2, reviveDuration: 2, reviveHealth: 0.5,
   inputBuffer: 0.2,

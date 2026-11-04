@@ -19,7 +19,7 @@ const P = {
   /** Слепое Лихо слышит атаки: сколько прислушивается и во сколько раз быстрее бросается на звук. */
   listenTime: 0.45, rushSpeedup: 1.5, hearingMemory: 3,
   /** Сколько лежит без сил, ожидая добивания, прежде чем подняться. */
-  finisherWindow: 6, stabDistance: 1.25, recoilTime: 0.6, chargeBlockedTime: 1.2,
+  finisherWindow: 6, stabDistance: 1.25, recoilTime: 0.6, recoilFleeChance: 0.35, chargeBlockedTime: 1.2,
   bodyRadius: 0.55,
   /** Урон от столкновения с телом Лиха. */
   contactDamage: 10,
@@ -222,8 +222,16 @@ export class Likho {
       yield* this.lunge(target);
       if (this.dashBlocked) break;
     }
-    // Выпад упёрся в щит: Лихо отшатывается и сразу убегает прятаться, без долгого окна для ударов.
-    if (this.dashBlocked) { yield* this.recoil(target, P.recoilTime); return; }
+    // Выпад упёрся в щит: Лихо отшатывается. Иногда убегает прятаться, иначе продолжает серию взмахом и выдыхается.
+    // После идеального блока никуда не бежит, остаётся под ударами.
+    if (this.dashBlocked) {
+      const perfect = this.dashPerfect;
+      yield* this.recoil(target, P.recoilTime);
+      if (!perfect) {
+        if (Math.random() < P.recoilFleeChance) return;
+        if (!this.atFloor && !this.dead) yield* this.swipe(this.pickTarget() ?? target);
+      }
+    }
 
     // Выдохлось после рывка — окно для ударов. Еле ползёт в сторону.
     this.pose = 'Tired';
@@ -351,7 +359,11 @@ export class Likho {
   }
 
   /** Богатырь принял рывок на щит. */
-  onDashBlocked() { if (this.claws.active) this.dashBlocked = true; }
+  onDashBlocked(perfect = false) {
+    if (!this.claws.active) return;
+    this.dashBlocked = true;
+    this.dashPerfect = perfect;
+  }
 
   // ---------------------------------------------------------------- Переход: рёв и проклятие
 
