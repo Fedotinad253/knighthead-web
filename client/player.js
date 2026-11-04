@@ -431,7 +431,7 @@ export class LocalPlayer {
     this.blocking = this.game.input.blockHeld && !locked && !me.downed && !this.stunned && !this.rolling && !this.shieldBroken
       && me.weapon !== null && this.attack?.kind !== ATTACK.ULTIMATE;
     if (this.blocking) { if (this.attack) this.cancelAttack(); return; }
-    this.shield = Math.min(P.blockStrength, this.shield + P.blockRegen * dt);
+    this.shield = Math.min(P.blockStrength, this.shield + (this.shieldBroken ? P.blockBrokenRegen : P.blockRegen) * dt);
     if (this.shield >= P.blockStrength) this.shieldBroken = false;
   }
 

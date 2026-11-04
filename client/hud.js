@@ -25,6 +25,8 @@ export class Hud {
     $('loadout-retreat').onclick = () => game.send({ t: 'retreat' });
     $('result-close').onclick = () => { $('result').hidden = true; };
     $('controls-close').onclick = () => this.toggle('controls', false);
+    $('pause-resume').onclick = () => this.setPaused(false);
+    $('pause-controls').onclick = () => this.toggle('controls', true);
     $('controls-reset').onclick = () => { game.input.reset(); this.renderControls(); };
     $('menu-controls').onclick = () => this.toggle('controls', true);
     // Громкость: двигаешь — сразу слышно взмах на новой громкости.
@@ -133,6 +135,28 @@ export class Hud {
       m.firstStar ? '<b style="color:#ffcf3a">★ Звёздочка на карте!</b>' : '',
     ].filter(Boolean).join('<br>');
     $('result').hidden = false;
+  }
+
+  setPaused(on) { this.game.paused = on; $('pause').hidden = !on; }
+
+  /**
+   * Пауза на Esc или своей кнопке. Esc сначала закрывает то, что открыто, и на карте и у камня он значит «назад».
+   * Останавливается только своя игра: мир в браузере ждёт, а сервер ждать не станет.
+   */
+  updatePause() {
+    const game = this.game, input = game.input, session = game.session;
+    if (input.capture || !game.world || !session) return;
+    if (game.paused) {
+      // Настройки управления открыты поверх паузы: Esc закрывает их.
+      $('pause').hidden = !$('controls').hidden;
+      if (!$('controls').hidden) { if (input.hitAlways('back') || input.hitAlways('help')) this.toggle('controls', false); return; }
+      if (input.hitAlways('help')) { this.toggle('controls', true); return; }
+      if (input.hitAlways('back') || input.hitAlways('pause')) this.setPaused(false);
+      return;
+    }
+    const busy = !$('controls').hidden || !$('debug').hidden || !$('result').hidden || this.dialogueOpen
+      || session.state === SESSION.MAP || session.preparing || session.stoneOpen;
+    if (!busy && (input.hitAlways('back') || input.hitAlways('pause'))) this.setPaused(true);
   }
 
   /** Полосы и реплика кат-сцены, пропуск нажатием. */
@@ -300,7 +324,7 @@ export class Hud {
     const move = ['up', 'left', 'down', 'right'].map(k).join('');
     $('hint').textContent = onMap
       ? (game.session.stoneOpen ? `1 / 2 — выбрать сложность     ${k('back')} — отойти` : `${move} — бежать избушкой     ${k('interact')} — в бой у логова     ${k('back')} — отойти от карты`)
-      : `${k('light')}/${k('heavy')} — атаки   ${k('card')} + атака — карта и ультимейт   ${k('dash')} — перекат   ${k('block')} — блок (держать)   ${k('ability')}/${k('magic')} — способность и магия   ${k('interact')} — действие   ${k('help')} — управление`;
+      : `${k('light')}/${k('heavy')} — атаки   ${k('card')} + атака — карта и ультимейт   ${k('dash')} — перекат   ${k('block')} — блок (держать)   ${k('ability')}/${k('magic')} — способность и магия   ${k('interact')} — действие   ${k('back')} — пауза   ${k('help')} — управление`;
   }
 
   updateMap(onMap) {

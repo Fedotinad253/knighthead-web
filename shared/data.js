@@ -255,7 +255,7 @@ export function rateFight({ time, par, damageTaken, defended, difficulty }) {
 export const PLAYER = {
   speed: 5.5, acceleration: 65, deceleration: 85,
   rollDistance: 3.2, rollDuration: 0.42, rollCooldown: 0.15,
-  blockStrength: 50, blockCostPerDamage: 2.5, blockMinCost: 15, blockRegen: 15, blockSpeed: 0.45, blockBreakStun: 0.6,
+  blockStrength: 100, blockCostPerDamage: 2.5, blockMinCost: 15, blockRegen: 30, blockBrokenRegen: 12, blockSpeed: 0.45, blockBreakStun: 0.6,
   jumpGrace: 0.15, jumpReach: 0.5, hurtRadius: 0.45, hitInvulnerability: 1, blinkRate: 6, blinkBrightness: 0.55,
   radius: 0.4, maxHealth: 100,
   reviveRadius: 2.2, reviveDuration: 2, reviveHealth: 0.5,

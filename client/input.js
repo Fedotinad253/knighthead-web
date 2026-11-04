@@ -7,7 +7,7 @@ export const ACTIONS = [
   ['up', 'Вверх'], ['down', 'Вниз'], ['left', 'Влево'], ['right', 'Вправо'],
   ['light', 'Лёгкая атака'], ['heavy', 'Тяжёлая атака'], ['card', 'Карта (удерживать)'],
   ['dash', 'Перекат'], ['block', 'Блок (удерживать)'], ['ability', 'Бытовая способность'], ['magic', 'Магия'], ['interact', 'Взаимодействие'],
-  ['back', 'Назад'], ['help', 'Управление'], ['debug', 'Отладка'],
+  ['back', 'Назад'], ['pause', 'Пауза'], ['help', 'Управление'], ['debug', 'Отладка'],
 ];
 
 const IS_MAC = /mac/i.test(navigator.userAgentData?.platform ?? navigator.platform ?? '');
@@ -18,7 +18,7 @@ export const DEFAULT_BINDINGS = {
   up: ['KeyW', 'ArrowUp'], down: ['KeyS', 'ArrowDown'], left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'],
   light: ['Mouse0'], heavy: ['Mouse2'], card: ['ShiftLeft', 'ShiftRight'],
   dash: ['Space'], block: ['KeyV'], ability: ['KeyQ'], magic: ['KeyE'], interact: ['KeyF'],
-  back: ['Escape', 'Backspace'], help: ['F1'], debug: ['F3', 'Backquote'],
+  back: ['Escape', 'Backspace'], pause: ['KeyP'], help: ['F1'], debug: ['F3', 'Backquote'],
 };
 
 /** Прежние кнопки по умолчанию: если игрок их не менял, сохранённое заменяется новыми. */
