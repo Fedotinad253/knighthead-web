@@ -253,8 +253,8 @@ class Game {
 
   frame(realDt) {
     this.hud.updatePause();
-    // На паузе время стоит, на холсте остаётся последний кадр.
-    if (this.paused) { this.input.endFrame(); return; }
+    // На паузе время стоит, но кадр рисуется: иначе при смене размера окна холст станет чёрным.
+    if (this.paused) { if (this.latest && this.session?.state !== SESSION.MAP) drawWorld(this); this.input.endFrame(); return; }
     this.realNow = (this.realNow ?? 0) + realDt;
     let dt = realDt;
     if (this.stopLeft > 0) { this.stopLeft -= realDt; dt = realDt * 0.04; }
