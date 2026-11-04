@@ -435,6 +435,15 @@ export class LocalPlayer {
     if (this.shield >= P.blockStrength) this.shieldBroken = false;
   }
 
+  /** Щит пробит: поднимется, только когда восстановится полностью, а богатырь на миг теряется. */
+  breakShield() {
+    this.shield = 0;
+    this.shieldBroken = true;
+    this.blocking = false;
+    this.stunnedUntil = Math.max(this.stunnedUntil, this.now + P.blockBreakStun);
+    this.game.vfx.text(this.x, this.z, 2.6, 'Щит пробит!', '#ff6a50', 1.2);
+  }
+
   /** Удар пришёлся в щит: урона нет, щит изнашивается. Последний удар щит тоже держит, но пробивается и богатырь на миг теряется. */
   blockHit(h) {
     const game = this.game;
@@ -447,13 +456,7 @@ export class LocalPlayer {
     game.hitStop(dash ? 0.14 : 0.06);
     game.view.shake(dash ? 0.32 : 0.14, 0.15, this.now);
     playSound('block');
-    if (this.shield <= 0) {
-      this.shield = 0;
-      this.shieldBroken = true;
-      this.blocking = false;
-      this.stunnedUntil = this.now + P.blockBreakStun;
-      game.vfx.text(this.x, this.z, 2.6, 'Щит пробит!', '#ff6a50', 1.2);
-    }
+    if (this.shield <= 0) this.breakShield();
     if (h.repeat) { this.invulnerableUntil = this.now + 0.4; return; } // тело босса: повторно ударит не сразу, и карт за него нет
     this.processed.set(h.key, this.now);
     if (h.type === 'proj' && !h.keep) game.removeHazardLocally(h.id);
@@ -485,6 +488,8 @@ export class LocalPlayer {
       // Во время неуязвимости опасность не помечаем: если всё ещё касается — ударит позже.
       if (this.invulnerable) continue;
       if (this.blocking && h.block) { this.blockHit(h); continue; }
+      // Тяжёлый удар, который щит не держит (сук, топот, всадник): ранит и разбивает щит целиком.
+      if (this.blocking && h.breaks) this.breakShield();
       if (!h.repeat) this.processed.set(h.key, this.now);
       this.invulnerableUntil = this.now + P.hitInvulnerability;
       this.blinkUntil = this.now + P.hitInvulnerability;

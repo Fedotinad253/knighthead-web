@@ -207,7 +207,7 @@ class Game {
     if (b?.contact) list.push({ id: 'body', key: 'body', repeat: true, type: 'body', block: true, x: b.x, z: b.z, r: (b.radius ?? 0.55) + 0.2, dmg: b.contact });
     // Забор Яги ранит прижавшегося (с маслом для ворот — нет), бегущая избушка сбивает.
     if (b?.fenceR && this.me?.charm !== 'oil') list.push({ id: 'fence', key: 'fence', repeat: true, type: 'fence', R: b.fenceR, x: 0, z: 0, r: 0, dmg: 8 });
-    if (b?.hut?.charging) list.push({ id: 'hutCharge', key: `hut:${b.hut.token}`, type: 'body', x: b.hut.x, z: b.hut.z, r: b.hut.r + 0.2, dmg: 20 });
+    if (b?.hut?.charging) list.push({ id: 'hutCharge', key: `hut:${b.hut.token}`, type: 'body', breaks: true, x: b.hut.x, z: b.hut.z, r: b.hut.r + 0.2, dmg: 20 });
     if (b?.claws) list.push({ id: 'claws', key: `claws:${b.claws.token}`, type: 'claws', block: true, x: b.x + b.fx * 0.6, z: b.z + b.fz * 0.6, r: 1.3, dmg: b.claws.damage });
     return list;
   }
