@@ -2,7 +2,12 @@
 // с Калиновым мостом, золотая лестница в Правь, логова боссов. По ней свободно бегает избушка на курьих ножках.
 import { MAP } from '../shared/scenes.js';
 import { BOSSES, DIFFICULTIES, RANKS, RANK_S_PLUS } from '../shared/data.js';
-import { shade } from './view.js';
+import { shade, SIN } from './view.js';
+import { assets } from './assets.js';
+import { drawHut, drawYaga } from './yagaview.js';
+
+/** Во сколько раз избушка на карте меньше настоящей. */
+const HUT_SCALE = 0.42;
 
 export class MapView {
   constructor(game) {
@@ -36,15 +41,9 @@ export class MapView {
     ctx.fillRect(0, 0, view.w, view.h);
 
     view.groundRect(4, 0, 70, 36, '#29241f');
-    for (const r of MAP.regions) view.groundRect(r.x, r.z, r.w, r.d, r.color);
-    // Огненная река Смородина.
-    const flow = Math.sin(now * 2) * 0.1;
-    view.groundRect(MAP.river.x, 0, MAP.river.w, 22, '#f25a1a');
-    view.groundRect(MAP.river.x + flow, 0, MAP.river.w * 0.5, 22, 'rgba(255,190,60,0.55)');
-    view.groundRect(MAP.bridge.x, MAP.bridge.z, MAP.bridge.w, MAP.bridge.d, '#73472a');
-    view.label(MAP.river.x, -8, 0.3, 'река Смородина', '#ff9a4d', 0.5);
-    // Золотая лестница.
-    for (let i = 0; i < 3; i++) view.box(MAP.stairs.x + i * 0.6, MAP.stairs.z, 0.6, 2, 0.2 + i * 0.24, '#e6bf59', -0.05);
+    for (const r of MAP.regions) this.drawRegion(view, r);
+    this.drawRiver(view, now);
+    view.label(MAP.river.x, -8, 0.3, 'река Смородина', '#ffb36e', 0.5);
 
     // Дороги — просто рисунок: бегать можно где угодно.
     ctx.strokeStyle = 'rgba(230,205,150,0.55)';
@@ -58,7 +57,7 @@ export class MapView {
 
     const results = session?.results ?? [];
     const unlocked = (w) => this.game.isWorldUnlocked(w);
-    // Логова.
+    // Логова лежат на земле, поверх них всё, что стоит.
     MAP.nodes.forEach(([x, z], i) => {
       const boss = BOSSES[i - 1];
       const open = i === 0 || unlocked(boss.world);
@@ -68,16 +67,25 @@ export class MapView {
       view.groundEllipse(x, z, 1.0, 1.0, color);
       if (i > 0 && results[i - 1] >= 0) view.groundEllipse(x, z, 0.45, 0.45, '#fff2b3');
     });
+    // Предметы и избушка закрывают друг друга по дальности.
+    const drawables = MAP.decor.map(([name, x, z, height, lift = 0]) => ({ z, draw: () => this.sprite(view, name, x, z, height, lift) }));
+    drawables.push({ z: MAP.bridge.z, draw: () => this.sprite(view, 'bridge_kalinov', MAP.bridge.x, MAP.bridge.z - 1.2, 3.1) });
+    drawables.push({ z: MAP.stairs.z, draw: () => this.sprite(view, 'stairs_golden', MAP.stairs.x + 0.6, MAP.stairs.z - 1, 5) });
+    const yaga = MAP.nodes[MAP.nodes.length - 1];
+    drawables.push({ z: yaga[1], draw: () => drawYaga(this.game, { x: yaga[0], z: yaga[1], fx: 1, pose: 'Hover', airborne: true, onRoof: false, flyY: 0.9 + Math.sin(now * 3) * 0.1 }) });
     // Преграды закрытых миров: огненный туман у моста и сияние у лестницы.
     for (const b of MAP.barriers) {
       if (unlocked(b.world)) continue;
-      for (let i = -1; i <= 1; i++) {
-        const flick = 0.85 + Math.sin(now * 8 + i) * 0.15;
-        view.cylinder(b.x, b.z + i * 0.9, 0.3, 2.4 * flick, b.color.length === 7 ? b.color : '#ff6619');
-      }
+      drawables.push({ z: b.z - 1.3, draw: () => {
+        for (let i = -1; i <= 1; i++) {
+          const flick = 0.85 + Math.sin(now * 8 + i) * 0.15;
+          view.cylinder(b.x, b.z + i * 0.9, 0.3, 2.4 * flick, b.color.length === 7 ? b.color : '#ff6619');
+        }
+      } });
     }
-
-    this.drawHut(view, now);
+    drawables.push({ z: this.hutZ, draw: () => this.drawHut(view, now) });
+    drawables.sort((a, b) => b.z - a.z);
+    for (const d of drawables) d.draw();
 
     // Подписи.
     MAP.nodes.forEach(([x, z], i) => {
@@ -95,42 +103,55 @@ export class MapView {
     view.lighting(0.9, [], null, now);
   }
 
-  /** Избушка на курьих ножках: на бегу перебирает ногами и подпрыгивает, на месте покачивается. */
-  drawHut(view, now) {
-    const ctx = view.ctx, s = view.s;
-    const [px, py] = view.project(this.hutX, this.hutZ);
-    const step = Math.sin(now * 16) * this.run;
-    const idle = Math.sin(now * 2) * (1 - this.run);
-    view.groundEllipse(this.hutX, this.hutZ, 1.1, 0.8, 'rgba(0,0,0,0.35)');
+  /** Предмет на карте: низ картинки стоит в точке (x, z). */
+  sprite(view, name, x, z, height, lift = 0) {
+    const image = assets.image(`map/${name}.png`);
+    if (!image?.naturalWidth) return;
+    const [px, py] = view.project(x, z), h = height * view.s, w = h * image.naturalWidth / image.naturalHeight;
+    view.ctx.drawImage(image, px - w / 2, py - lift * view.s - h, w, h);
+  }
+
+  /** Земля мира: цвет, а поверх него, если есть, приглушённый рисунок. Собирается один раз. */
+  drawRegion(view, r) {
+    view.groundRect(r.x, r.z, r.w, r.d, r.color);
+    const image = r.ground && assets.image(r.ground);
+    if (!image?.naturalWidth) return;
+    if (!r.baked) {
+      const density = 40, tile = r.tile * density;
+      r.baked = document.createElement('canvas');
+      r.baked.width = r.w * density; r.baked.height = Math.round(r.d * SIN * density);
+      const bake = r.baked.getContext('2d');
+      bake.globalAlpha = 0.55;
+      for (let x = 0; x < r.baked.width; x += tile) for (let y = 0; y < r.baked.height; y += tile * SIN) bake.drawImage(image, x, y, tile, tile * SIN);
+    }
+    const [x0, y0] = view.project(r.x - r.w / 2, r.z + r.d / 2), [x1, y1] = view.project(r.x + r.w / 2, r.z - r.d / 2);
+    view.ctx.drawImage(r.baked, x0, y0, x1 - x0, y1 - y0);
+  }
+
+  /** Огненная река сверху вниз, медленно течёт. */
+  drawRiver(view, now) {
+    const image = assets.image('map/river_smorodina.png');
+    const ctx = view.ctx;
+    if (!image?.naturalWidth) { view.groundRect(MAP.river.x, 0, MAP.river.w, 22, '#f25a1a'); return; }
+    const width = MAP.river.w * 2 * view.s, tile = width * image.naturalHeight / image.naturalWidth;
+    const [px, top] = view.project(MAP.river.x, 11), [, bottom] = view.project(MAP.river.x, -11);
     ctx.save();
-    ctx.translate(px, py);
-    ctx.scale(this.facing, 1);
-    const leg = (x, swing) => {
-      ctx.save();
-      ctx.translate(x * s, -1.25 * s);
-      ctx.rotate(swing);
-      ctx.strokeStyle = '#d99a40'; ctx.lineWidth = 0.16 * s; ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0.1 * s, 0.6 * s); ctx.lineTo(-0.05 * s, 1.2 * s); ctx.stroke();
-      ctx.lineWidth = 0.08 * s;
-      for (const t of [-0.3, 0, 0.3]) { ctx.beginPath(); ctx.moveTo(-0.05 * s, 1.2 * s); ctx.lineTo((-0.05 + 0.35) * s, (1.2 + t * 0.3) * s); ctx.stroke(); }
-      ctx.restore();
-    };
-    leg(-0.45, step * 0.6);
-    leg(0.45, -step * 0.6);
-    const lift = Math.abs(step) * 0.25 + idle * 0.05;
-    ctx.translate(0, -lift * s);
-    ctx.rotate(idle * 0.03);
-    // Сруб.
-    ctx.fillStyle = '#80542e';
-    ctx.fillRect(-0.95 * s, -2.6 * s, 1.9 * s, 1.35 * s);
-    ctx.strokeStyle = 'rgba(40,20,10,0.6)'; ctx.lineWidth = 0.04 * s;
-    for (let i = 1; i < 5; i++) { ctx.beginPath(); ctx.moveTo(-0.95 * s, (-2.6 + i * 0.27) * s); ctx.lineTo(0.95 * s, (-2.6 + i * 0.27) * s); ctx.stroke(); }
-    // Крыша.
-    ctx.fillStyle = '#4d331f';
-    ctx.beginPath(); ctx.moveTo(-1.2 * s, -2.55 * s); ctx.lineTo(0, -3.55 * s); ctx.lineTo(1.2 * s, -2.55 * s); ctx.closePath(); ctx.fill();
-    // Дверь и светящееся окошко.
-    ctx.fillStyle = '#40260f'; ctx.fillRect(-0.55 * s, -2.0 * s, 0.45 * s, 0.75 * s);
-    ctx.fillStyle = '#ffd966'; ctx.fillRect(0.25 * s, -2.25 * s, 0.38 * s, 0.38 * s);
+    ctx.beginPath(); ctx.rect(px - width / 2, top, width, bottom - top); ctx.clip();
+    for (let y = top - tile + (now * view.s * 0.5) % tile; y < bottom; y += tile) ctx.drawImage(image, px - width / 2, y, width, tile + 1);
+    ctx.restore();
+  }
+
+  /** Избушка на курьих ножках: те же рисунки, что и в бою, только меньше. На бегу перебирает ногами и подпрыгивает. */
+  drawHut(view, now) {
+    const ctx = view.ctx;
+    const [px, py] = view.project(this.hutX, this.hutZ);
+    const bounce = Math.abs(Math.sin(now * 16)) * this.run * 0.2 * view.s, sway = Math.sin(now * 2) * (1 - this.run) * 0.02;
+    ctx.save();
+    ctx.translate(px, py - bounce);
+    ctx.rotate(sway);
+    ctx.scale(HUT_SCALE, HUT_SCALE);
+    ctx.translate(-px, -py);
+    drawHut(this.game, { x: this.hutX, z: this.hutZ, moving: this.run > 0.2, charging: this.run > 0.2, onMap: true });
     ctx.restore();
   }
 }

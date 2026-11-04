@@ -118,7 +118,7 @@ export function drawHut(game, hut) {
   const { view } = game, ctx = view.ctx, { x, z } = hut;
   // Если за избушкой стоит богатырь или Яга на земле, избушка становится прозрачной.
   const covers = (e) => e && z < e.z && e.z - z < 9 && Math.abs(x - e.x) < HUT_WIDTH / 2 + 0.6;
-  const inFront = covers(game.local) || (game.boss && !game.boss.onRoof && covers(game.boss));
+  const inFront = !hut.onMap && (covers(game.local) || (game.boss && !game.boss.onRoof && covers(game.boss)));
   ctx.save();
   ctx.globalAlpha = inFront ? 0.5 : 1;
   view.groundEllipse(x, z, 3.6, 2.4, 'rgba(0,0,0,0.3)');

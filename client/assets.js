@@ -32,9 +32,11 @@ export const ALL_IMAGES = [
     .map((n) => `characters/likho/${n}.png`),
   'characters/Healer.png', 'characters/Smith.png',
   ...['floor', 'wall_back', 'wall_side'].map((n) => `hut/${n}.jpg`),
-  ...['door', 'window', 'oven', 'oven_fire', 'polati', 'spinning_wheel', 'stupa', 'bench', 'chest_open', 'chest_closed', 'table_feast', 'table_cloth', 'stool',
+  ...['door', 'window', 'oven', 'oven_fire', 'polati', 'spinning_wheel', 'bench', 'chest_open', 'chest_closed', 'table_feast', 'table_cloth', 'stool',
     'water_jugs', 'mirror', 'herbs', 'forge_fire', 'anvil', 'weapon_rack', 'domovoy', 'domovoy_idle', 'raven', 'cat_sleep'].map((n) => `hut/${n}.png`),
-  'map/saucer.png',
+  'map/saucer.png', 'map/ground_field.jpg', 'map/ground_forest.jpg',
+  ...['tree_pine', 'tree_oak', 'tree_dead', 'mountain', 'hill_kurgan', 'tower_ruin', 'swamp_reeds', 'village', 'cloud', 'world_tree', 'river_smorodina', 'bridge_kalinov',
+    'grave_field', 'stairs_golden'].map((n) => `map/${n}.png`),
   ...['Sword', 'Axe', 'Mace', 'Bow', 'Crossbow'].map((n) => `weapons/${n}.png`),
   ...['ground', 'oak1', 'oak2', 'oak1_burnt', 'oak2_burnt', 'tree1', 'tree2', 'bush1', 'bush2', 'bush_cut', 'bush_burnt', 'fern', 'mushrooms', 'stone', 'leaves', 'root', 'exit']
     .map((n) => `forest/${n}.png`),

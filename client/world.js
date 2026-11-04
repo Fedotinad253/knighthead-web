@@ -382,10 +382,11 @@ function addTavernProps(game, add) {
   prop('herbs', -11, wall, 1.3, false, 2.2);
   prop('herbs', 3, wall, 1, true, 2.9);
 
-  // Печь, рядом с ней ступа Яги, прялка, зеркальце, ворон, кот и домовой в горшке.
+  // Печь, рядом с ней Яга, прялка, зеркальце, ворон, кот и домовой в горшке.
   prop('oven_fire', 0, 9.4, 5);
   fireGlow(view, add, 0, 9.3, game.now);
-  prop('stupa', -3.6, 8.7, 2.5);
+  // Бывшая хозяйка сидит в своей ступе: те же рисунки, что и в бою.
+  add(8.7, () => drawYaga(game, { x: -3.6, z: 8.7, fx: 1, pose: 'Stand', airborne: false, onRoof: false }));
   prop('spinning_wheel', -6.8, 8.7, 2.4);
   prop('mirror', 4.2, 8.8, 1.8);
   prop('raven', 6.4, 9.1, 1.9, true);
@@ -458,6 +459,7 @@ function drawTavernLabels(game) {
   view.label(-9, 5, 2.5, 'Знахарка Милава', '#c9f5c0', 0.38);
   view.label(9, 5, 2.6, 'Кузнец Добромир', '#ffd2a6', 0.38);
   view.label(8.3, -6.4, 1.6, 'Домовой', '#e9dcb0', 0.36);
+  view.label(-3.6, 8.7, 2.7, 'Баба-Яга', '#e9dcb0', 0.38);
 }
 
 function candle(view, x, z, y, now) {
