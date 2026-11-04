@@ -171,6 +171,7 @@ export class LocalPlayer {
       // Наклон прицела (градусы): лук и арбалет целятся вверх и вниз по экрану.
       aim: Math.round(Math.asin(Math.max(-1, Math.min(1, this.attack ? this.aimZ : this.fz))) * 57.3),
       block: this.blocking,
+      downed: !!this.me?.downed,
       blink: this.now < this.blinkUntil ? Math.round((this.blinkUntil - this.now) * 100) / 100 : 0,
       stun: this.stunned,
       cine: this.game.boss?.cine?.actor === this.game.myId ? this.game.boss.cine.pose : null,
@@ -441,8 +442,10 @@ export class LocalPlayer {
     this.shieldFlashUntil = this.now + 0.18;
     game.vfx.guardFlash(this.x, this.z);
     game.vfx.sparks(this.x, this.z, 10);
-    game.hitStop(0.06);
-    game.view.shake(0.14, 0.15, this.now);
+    // Рывок босса в щит ощущается сильнее обычного удара.
+    const dash = h.type === 'claws';
+    game.hitStop(dash ? 0.14 : 0.06);
+    game.view.shake(dash ? 0.32 : 0.14, 0.15, this.now);
     playSound('block');
     if (this.shield <= 0) {
       this.shield = 0;

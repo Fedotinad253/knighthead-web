@@ -143,6 +143,7 @@ export class Game {
       case 'blocked': {
         const hazard = this.hazards.find((h) => h.id === m.hazard);
         if (hazard?.consume) this.removeHazard(hazard);
+        if (m.hazard === 'claws') this.boss?.onDashBlocked?.();
         if (this.stats) this.stats.defended++;
         this.addCards(player, CARDS.perBlock);
         this.broadcast({ t: 'blockFlash', id: player.id, x: player.x, z: player.z }, player);
@@ -925,7 +926,7 @@ export class Game {
       decoy: this.activeDecoy() ? { x: r2(this.decoy.x), z: r2(this.decoy.z), owner: this.decoy.owner, left: r2(this.decoy.expire - now) } : null,
       boss: this.boss?.snapshot() ?? null,
       hazards: this.hazards.map((h) => h.type === 'proj'
-        ? { id: h.id, type: 'proj', look: h.look, wide: h.wide, x: r2(h.x), z: r2(h.z), y: h.y, vx: r2(h.vx), vz: r2(h.vz), r: h.r, block: true, dmg: h.damage, keep: !h.consume }
+        ? { id: h.id, type: 'proj', look: h.look, wide: h.wide, x: r2(h.x), z: r2(h.z), y: h.y, vx: r2(h.vx), vz: r2(h.vz), r: h.r, block: !h.look?.startsWith('rider') && !h.look?.startsWith('wing'), dmg: h.damage, keep: !h.consume }
         : { id: h.id, type: 'zone', kind: h.kind, look: h.look, x: r2(h.x), z: r2(h.z), r: h.r, block: h.block, dmg: h.damage, stun: h.stun }),
       arrows: this.projectiles.map((p) => ({ id: p.id, x: r2(p.x), z: r2(p.z), vx: r2(p.vx), vz: r2(p.vz), big: p.big, burn: p.effect === 'burn' })),
     };

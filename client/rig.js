@@ -298,6 +298,8 @@ export class BogatyrAnimator {
     const fighting = atk || block || cine;
     // В кат-сцене оружие за спиной, в руке другое (см. drawAwl).
     if (cine) { this.inHand = false; this.stowUntil = -1; }
+    // Павший богатырь оружие не убирает: что было в руке, в руке и останется.
+    else if (anim.downed) this.stowUntil = -1;
     else if (fighting) { this.heldUntil = now + WEAPON_HOLD; this.stowUntil = -1; this.inHand = true; }
     else if (this.inHand && now >= this.heldUntil) {
       if (this.stowUntil < 0) this.stowUntil = now + STOW_TIME;

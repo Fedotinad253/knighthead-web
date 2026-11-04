@@ -324,6 +324,13 @@ export class Yaga {
 
   clawsOn(damage) { this.claws.damage = damage; this.claws.token++; this.claws.active = true; }
   clawsOff() { this.claws.active = false; }
+  /** Богатырь принял рывок на щит: Яга останавливается. Бег избушки так не остановить, он щитом не блокируется. */
+  onDashBlocked() {
+    if (!this.claws.active) return;
+    this.dashBlocked = true;
+    this.game.shake(0.3, 0.3);
+    this.game.floatText(this.x, this.z, 3, 'Отбито!', '#ffd94d', 1.2);
+  }
   face(dx, dz) { const [x, z] = norm(dx, dz); if (x || z) { this.fx = x; this.fz = z; } }
 
   clampToArena(x, z) {
@@ -390,7 +397,9 @@ export class Yaga {
     this.clawsOn(P.diveDamage);
     let travelled = 0;
     const speed = this.fast(P.diveSpeed);
-    while (travelled < length && !this.dead) {
+    this.dashBlocked = false;
+    // Если налёт упёрся в щит, ступа вязнет прямо перед богатырём.
+    while (travelled < length && !this.dead && !this.dashBlocked) {
       const step = speed * this.dt;
       if (!this.stepYaga(dx, dz, step)) break;
       travelled += step;
@@ -764,7 +773,9 @@ export class Yaga {
     this.pose = 'Dive';
     this.clawsOn(P.dashDamage);
     let travelled = 0;
-    while (travelled < length && !this.dead) {
+    this.dashBlocked = false;
+    // Если рывок упёрся в щит, сразу тяжело дышит: это окно для ударов.
+    while (travelled < length && !this.dead && !this.dashBlocked) {
       const step = this.fast(P.dashSpeed) * this.dt;
       if (!this.stepYaga(dx, dz, step)) break;
       travelled += step;
